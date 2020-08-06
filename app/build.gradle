@@ -1,0 +1,100 @@
+apply plugin: 'com.android.application'
+
+static def gitVersion() {
+    def cmd = 'git rev-list HEAD --first-parent --count'
+    return cmd.execute().text.trim().toInteger()
+}
+
+android {
+    compileSdkVersion 29
+    buildToolsVersion "30.0.1"
+
+    Properties properties = new Properties()
+    InputStream inputStream = rootProject.file('local.properties').newDataInputStream()
+    properties.load(inputStream)
+
+    def key_keyAlias = properties.getProperty("keyAlias")
+    def key_keyPassword = properties.getProperty("keyPassword")
+    def key_keyFile = properties.getProperty("keyFile")
+    def key_storePassword = properties.getProperty("storePassword")
+
+    defaultConfig {
+        applicationId "com.vinson.addev"
+        minSdkVersion 16
+        targetSdkVersion 29
+        versionCode gitVersion()
+        versionName "1.0." + gitVersion()
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        debug {
+            keyAlias key_keyAlias
+            keyPassword key_keyPassword
+            storeFile file(key_keyFile)
+            storePassword key_storePassword
+        }
+
+        release {
+            keyAlias key_keyAlias
+            keyPassword key_keyPassword
+            storeFile file(key_keyFile)
+            storePassword key_storePassword
+        }
+    }
+
+    buildTypes {
+        debug {
+            debuggable true
+            jniDebuggable true
+            minifyEnabled false
+            zipAlignEnabled false
+            applicationIdSuffix '.debug'
+            signingConfig signingConfigs.debug
+        }
+
+        release {
+            minifyEnabled false
+            debuggable true
+            jniDebuggable true
+            zipAlignEnabled true
+            applicationIdSuffix '.release'
+            signingConfig signingConfigs.release
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    applicationVariants.all { variant ->
+        variant.outputs.all {
+            if (outputFileName != null && outputFileName.endsWith('.apk')) {
+                if (variant.buildType.name == 'release') {
+                    outputFileName = "addev_" + versionName + ".apk"
+                } else if (variant.buildType.name == 'debug') {
+                    outputFileName = "addev_" + versionName + "_debug.apk"
+                }
+            }
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    packagingOptions {
+        exclude 'META-INF/LICENSE.md'
+        exclude 'META-INF/NOTICE.md'
+        exclude 'META-INF/NOTICE.markdown'
+    }
+}
+
+dependencies {
+    implementation fileTree(dir: "libs", include: ["*.jar"])
+    implementation 'androidx.appcompat:appcompat:1.1.0'
+    implementation 'androidx.constraintlayout:constraintlayout:1.1.3'
+    testImplementation 'junit:junit:4.12'
+    androidTestImplementation 'androidx.test.ext:junit:1.1.1'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.2.0'
+
+}

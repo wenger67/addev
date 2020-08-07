@@ -17,4 +17,15 @@ public class Config {
     public static boolean getConfiged() {
         return App.getInstance().getSP().getBoolean(Constants.SP_KEY_CONFIGED, false);
     }
+
+    public static void setDeviceSerial(String serial) {
+        if (serial.equals(getDeviceSerial())) return;
+        SharedPreferences.Editor editor = App.getInstance().getSP().edit();
+        editor.putString(Constants.SP_KEY_DEVICE_SERIAL, serial);
+        editor.apply();
+    }
+
+    public static String getDeviceSerial() {
+        return App.getInstance().getSP().getString(Constants.SP_KEY_DEVICE_SERIAL, "");
+    }
 }

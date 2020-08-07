@@ -28,4 +28,15 @@ public class Config {
     public static String getDeviceSerial() {
         return App.getInstance().getSP().getString(Constants.SP_KEY_DEVICE_SERIAL, "");
     }
+
+    public static void setStreamId(String serial) {
+        if (serial.equals(getStreamId())) return;
+        SharedPreferences.Editor editor = App.getInstance().getSP().edit();
+        editor.putString(Constants.SP_KEY_STREAM_ID, serial);
+        editor.apply();
+    }
+
+    public static String getStreamId() {
+        return App.getInstance().getSP().getString(Constants.SP_KEY_STREAM_ID, "");
+    }
 }

@@ -18,6 +18,9 @@ android {
     def key_keyFile = properties.getProperty("keyFile")
     def key_storePassword = properties.getProperty("storePassword")
 
+    def zego_appid = properties.getProperty("zegoAppid")
+    def zego_appsign = properties.getProperty("zegoAppsign")
+
     defaultConfig {
         applicationId "com.vinson.addev"
         minSdkVersion 21
@@ -42,6 +45,11 @@ android {
             storeFile file(key_keyFile)
             storePassword key_storePassword
         }
+    }
+
+    buildTypes.each {
+        it.buildConfigField 'Long', 'ZegoAppId', zego_appid
+        it.buildConfigField 'String', 'ZegoAppSign', zego_appsign
     }
 
     buildTypes {

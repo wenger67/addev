@@ -16,13 +16,34 @@ import androidx.appcompat.app.AppCompatActivity;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.imageview.ShapeableImageView;
 import com.google.android.material.textfield.TextInputEditText;
+import com.google.android.material.textview.MaterialTextView;
+import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.google.gson.reflect.TypeToken;
 import com.mikepenz.community_material_typeface_library.CommunityMaterial;
 import com.mikepenz.iconics.IconicsDrawable;
 import com.vinson.addev.App;
 import com.vinson.addev.R;
 import com.vinson.addev.SplashActivity;
+import com.vinson.addev.data.DataHelper;
+import com.vinson.addev.model.LiftInfo;
+import com.vinson.addev.model.Result;
 import com.vinson.addev.tools.Config;
 import com.vinson.addev.tools.NetworkObserver;
+import com.vinson.addev.utils.Constants;
+
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.Objects;
+
+import okhttp3.ResponseBody;
+import okhttp3.internal.annotations.EverythingIsNonNull;
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
 
 /**
  * 1. register device info on server
@@ -43,9 +64,13 @@ public class ConfigActivity extends AppCompatActivity {
 
     MaterialButton btnGetInfo, btnSaveInfo;
     TextInputEditText etDeviceId;
+    MaterialTextView tvLiftInfo;
+
     ImageView mNetworkStateView;
     private IconicsDrawable mNetworkStateDrawable;
     private String mDeviceId = "";
+    private LiftInfo liftInfo;
+
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -54,6 +79,8 @@ public class ConfigActivity extends AppCompatActivity {
         btnGetInfo = findViewById(R.id.btn_get_info);
         btnSaveInfo = findViewById(R.id.btn_save_info);
         etDeviceId = findViewById(R.id.et_device_id);
+        tvLiftInfo = findViewById(R.id.tv_lift_info);
+
         mNetworkStateView = findViewById(R.id.iv_network_state);
         mNetworkStateDrawable = new IconicsDrawable(this).sizeDp(24);
         mNetworkStateView.setImageDrawable(mNetworkStateDrawable);
@@ -90,17 +117,49 @@ public class ConfigActivity extends AppCompatActivity {
         });
 
         btnGetInfo.setOnClickListener(v -> {
+            Log.d(TAG, mDeviceId + " " + Integer.parseInt(mDeviceId));
             if (mDeviceId.isEmpty()) {
                 App.getInstance().showToast("Device ID can not be empty!");
             } else {
-                //TODO get device info
+                DataHelper dataHelper = new DataHelper(Constants.BASE_URL);
+                dataHelper.getDevice(Integer.parseInt(mDeviceId)).enqueue(new Callback<ResponseBody>() {
+                    @Override
+                    @EverythingIsNonNull
+                    public void onResponse(Call<ResponseBody> call, Response<ResponseBody> response) {
+                        ResponseBody result = response.body();
+                        assert result != null;
+                        try {
+                            JsonObject object = new JsonParser().parse(result.string()).getAsJsonObject();
+                            JsonElement liftElement = object.get("data").getAsJsonObject().get("lift");
+                            liftInfo = new Gson().fromJson(liftElement, new TypeToken<LiftInfo>(){}.getType());
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                        Log.d(TAG, liftInfo.toString());
+
+                        String builder = "ID:" + liftInfo.getID() + "\n" + "别名:" + liftInfo.getNickName() + "\n" +
+                                "编码:" + liftInfo.getCode() + "\n" +
+                                "使用单位:" + liftInfo.getOwner().getFullName() + "\n" +
+                                "地址" + liftInfo.getAddress().getAddressName() + liftInfo.getBuilding() + "栋" +
+                                liftInfo.getCell() + "单元";
+                        tvLiftInfo.setText(builder);
+                    }
+
+                    @Override
+                    @EverythingIsNonNull
+                    public void onFailure(Call<ResponseBody> call, Throwable t) {
+                        Log.d(TAG, "onFailure");
+                        Log.d(TAG, Objects.requireNonNull(t.getMessage()));
+                        Log.d(TAG, Arrays.toString(t.getStackTrace()));
+                    }
+                });
             }
         });
 
         btnSaveInfo.setOnClickListener(v-> {
-            // TODO save device info info sharedpreference
-
             Config.setConfiged(true);
+            Config.setDeviceSerial(Constants.PREFIX + liftInfo.getID());
+            Config.setLiftInfo(liftInfo);
             mHandler.sendEmptyMessage(MSG_LAUNCH);
         });
     }

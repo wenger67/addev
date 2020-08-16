@@ -2,7 +2,10 @@ package com.vinson.addev.tools;
 
 import android.content.SharedPreferences;
 
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 import com.vinson.addev.App;
+import com.vinson.addev.model.LiftInfo;
 import com.vinson.addev.utils.Constants;
 
 public class Config {
@@ -27,6 +30,19 @@ public class Config {
 
     public static String getDeviceSerial() {
         return App.getInstance().getSP().getString(Constants.SP_KEY_DEVICE_SERIAL, "");
+    }
+
+    public static void setLiftInfo(LiftInfo liftInfo) {
+        if (liftInfo.equals(getLiftInfo())) return;
+        SharedPreferences.Editor editor = App.getInstance().getSP().edit();
+        String json = new Gson().toJson(liftInfo);
+        editor.putString(Constants.SP_KEY_LIFT_INFO, json);
+        editor.apply();
+    }
+
+    public static LiftInfo getLiftInfo() {
+        String json = App.getInstance().getSP().getString(Constants.SP_KEY_LIFT_INFO, "");
+        return new Gson().fromJson(json,new TypeToken<LiftInfo>(){}.getType());
     }
 
     public static void setStreamId(String serial) {

@@ -43,6 +43,7 @@
         <activity android:name=".initial.ConfigActivity"/>
         <activity android:name=".MainActivity"/>
         <activity android:name=".VideoRoomActivity"/>
+        <activity android:name=".SensorActivity"/>
 
         <service android:name=".services.WSService"/>
     </application>

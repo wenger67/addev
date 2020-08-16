@@ -16,16 +16,11 @@ import android.util.Log;
 import android.widget.ImageView;
 
 import com.google.android.material.button.MaterialButton;
-import com.google.android.material.textfield.TextInputEditText;
 import com.mikepenz.community_material_typeface_library.CommunityMaterial;
 import com.mikepenz.iconics.IconicsDrawable;
 import com.vinson.addev.services.WSService;
 import com.vinson.addev.tools.Config;
 import com.vinson.addev.tools.NetworkObserver;
-import com.vinson.addev.utils.Constants;
-
-import java.text.SimpleDateFormat;
-import java.util.Date;
 
 import im.zego.zegoexpress.entity.ZegoUser;
 
@@ -39,9 +34,7 @@ public class MainActivity extends AppCompatActivity {
     private static final int MSG_NETWORK_CHANGE = 5;
     WSService.Binder wsService;
 
-    TextInputEditText mUserIdView, mRoomIdView, mStreamIdView;
-    MaterialButton mEnter;
-    String mUserId, mRoomId, mStreamId;
+    MaterialButton mBtnSensor;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -65,73 +58,15 @@ public class MainActivity extends AppCompatActivity {
         Intent intent = new Intent(this, WSService.class);
         bindService(intent, mServiceConnection, BIND_AUTO_CREATE);
 
-        mUserIdView = findViewById(R.id.et_user_id);
-        mRoomIdView = findViewById(R.id.et_room_id);
-        mStreamIdView = findViewById(R.id.et_stream_id);
-        mEnter = findViewById(R.id.btn_enter);
-
+        mBtnSensor = findViewById(R.id.btn_sensors);
         initEvent();
 
     }
 
     private void initEvent() {
-        mUserIdView.addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
 
-            }
-
-            @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {
-
-            }
-
-            @Override
-            public void afterTextChanged(Editable s) {
-                mUserId = s.toString();
-            }
-        });
-
-        mRoomIdView.addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
-
-            }
-
-            @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {
-
-            }
-
-            @Override
-            public void afterTextChanged(Editable s) {
-                mRoomId = s.toString();
-            }
-        });
-
-        mStreamIdView.addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
-
-            }
-
-            @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {
-
-            }
-
-            @Override
-            public void afterTextChanged(Editable s) {
-                mStreamId = s.toString();
-            }
-        });
-
-        mEnter.setOnClickListener(v -> {
-            Config.setStreamId(mStreamId);
-            ZegoUser user = new ZegoUser(mUserId);
-            App.getEngine().loginRoom(mRoomId, user);
-            App.getEngine().startPublishingStream(mStreamId);
-            startActivity(new Intent(MainActivity.this, VideoRoomActivity.class));
+        mBtnSensor.setOnClickListener(v -> {
+            startActivity(new Intent(MainActivity.this, SensorActivity.class));
         });
     }
 

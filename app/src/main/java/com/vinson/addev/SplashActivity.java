@@ -82,13 +82,11 @@ public class SplashActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-
         if (!Config.getConfiged()) {
             // launch configactivity
             mHandler.removeCallbacksAndMessages(null);
             mHandler.sendEmptyMessage(MSG_LAUNCH_CONFIG);
         }
-
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             if (checkPermission()) {
                 mHandler.removeMessages(MSG_VERIFY_DEVICE);

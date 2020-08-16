@@ -36,6 +36,18 @@
             android:layout_height="wrap_content" />
     </LinearLayout>
 
+    <com.google.android.material.textview.MaterialTextView
+        android:id="@+id/tv_lift_info"
+        app:layout_constraintTop_toBottomOf="@id/rl_get_device_info"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintRight_toRightOf="parent"
+        android:layout_marginTop="36dp"
+        android:layout_marginLeft="16dp"
+        android:layout_marginRight="16dp"
+        style="@style/TextAppearance.MaterialComponents.Headline4"
+        android:maxLines="30"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"/>
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btn_save_info"

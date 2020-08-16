@@ -9,20 +9,27 @@ import android.net.NetworkRequest;
 import android.os.Binder;
 import android.os.Handler;
 import android.os.IBinder;
+import android.os.Message;
 import android.util.Log;
 
 import androidx.annotation.Nullable;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonObject;
 import com.vinson.addev.App;
 import com.vinson.addev.model.ws.WSEvent;
 import com.vinson.addev.tools.Config;
 import com.vinson.addev.utils.Constants;
 
+import org.json.JSONObject;
+
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
+import im.zego.zegoexpress.callback.IZegoEventHandler;
+import im.zego.zegoexpress.constants.ZegoPublisherState;
+import im.zego.zegoexpress.entity.ZegoUser;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.WebSocket;
@@ -40,6 +47,7 @@ public class WSService extends Service {
     private static final int MSG_UPLOAD_DUMP_FILES = 6;
     private static final int MSG_UPLOAD_LOGS = 7;
     private static final int MSG_SCHEDULE_TASKS = 8;
+    private static final int MSG_START_PUSH_STREAM = 101;
 
     private static final int WS_CLOSE_CODE = 1000;
 
@@ -51,6 +59,7 @@ public class WSService extends Service {
     private boolean mStopped = true;
     private WebSocket mWebSocket;
     private Gson mGson;
+    private String pushStreamRequester;
 
     @Override
     public void onCreate() {
@@ -112,6 +121,8 @@ public class WSService extends Service {
         mHandler.sendEmptyMessage(MSG_OPEN_WEBSOCKET);
         // 3. upload records that record when disconnect or upload faield
         // 4. schedule tasks
+
+        App.getEngine().setEventHandler(eventHandler);
     }
 
     private void stop() {
@@ -210,7 +221,11 @@ public class WSService extends Service {
 //                        mListener.onUpgrade(event.data);
                         break;
                     }
-
+                    case "push.stream":
+                        pushStreamRequester = event.data;
+                        mHandler.removeMessages(MSG_START_PUSH_STREAM);
+                        mHandler.sendEmptyMessage(MSG_START_PUSH_STREAM);
+                        break;
                     default:
                         Log.w(TAG, "unsupported event");
                         break;
@@ -267,7 +282,39 @@ public class WSService extends Service {
             case MSG_SCHEDULE_TASKS:
 //                timerTask();
                 break;
+            case MSG_START_PUSH_STREAM:
+                // TODO push stream
+                startPushStream();
         }
         return true;
     });
+
+    void startPushStream() {
+        String mStreamId = Config.getDeviceSerial();
+        Config.setStreamId(Config.getDeviceSerial());
+        ZegoUser user = new ZegoUser(Config.getDeviceSerial());
+        App.getEngine().loginRoom(Config.getDeviceSerial(), user);
+
+        WSEvent event = new WSEvent();
+        event.target = new String[]{pushStreamRequester};
+        event.what = "push.stream.start";
+        event.data = "roomid:" + Config.getDeviceSerial();
+        mWebSocket.send(mGson.toJson(event));
+        App.getEngine().startPublishingStream(mStreamId);
+    }
+
+    IZegoEventHandler eventHandler = new IZegoEventHandler() {
+        @Override
+        public void onPublisherStateUpdate(String streamID, ZegoPublisherState state, int errorCode, JSONObject extendedData) {
+            super.onPublisherStateUpdate(streamID, state, errorCode, extendedData);
+            Log.d(TAG, state + "");
+            if (state.equals(ZegoPublisherState.PUBLISHING)) {
+                WSEvent event = new WSEvent();
+                event.target = new String[]{pushStreamRequester};
+                event.what = "push.stream.success";
+                event.data = "streamid:" + streamID;
+                mWebSocket.send(mGson.toJson(event));
+            }
+        }
+    };
 }

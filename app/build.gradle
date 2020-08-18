@@ -6,8 +6,8 @@ static def gitVersion() {
 }
 
 android {
-    compileSdkVersion 29
-    buildToolsVersion "30.0.1"
+    compileSdkVersion rootProject.ext.android.compileSdkVersion
+    buildToolsVersion rootProject.ext.android.buildToolsVersion
 
     Properties properties = new Properties()
     InputStream inputStream = rootProject.file('local.properties').newDataInputStream()
@@ -23,8 +23,8 @@ android {
 
     defaultConfig {
         applicationId "com.vinson.addev"
-        minSdkVersion 21
-        targetSdkVersion 29
+        minSdkVersion rootProject.ext.android.minSdkVersion
+        targetSdkVersion rootProject.ext.android.targetSdkVersion
         versionCode gitVersion()
         versionName "1.0." + gitVersion()
 
@@ -115,6 +115,8 @@ dependencies {
     implementation 'com.github.licheedev:Android-SerialPort-API:2.0.0' // 串口通信
     implementation "com.github.nisrulz:easydeviceinfo-base:2.4.1"   // 传感器
     implementation 'com.github.nisrulz:sensey:1.0.1'    // sensor event
+
+    implementation project(":DaemonService")
 
     testImplementation 'junit:junit:4.12'
     androidTestImplementation 'androidx.test.ext:junit:1.1.1'

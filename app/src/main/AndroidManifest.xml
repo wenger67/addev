@@ -45,7 +45,21 @@
         <activity android:name=".VideoRoomActivity"/>
         <activity android:name=".SensorActivity"/>
 
-        <service android:name=".services.WSService"/>
+        <service android:name=".services.WSService"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter android:priority="1000">
+                <action android:name="com.vinson.addev.wsservice"/>
+            </intent-filter>
+        </service>
+
+        <receiver android:name=".receiver.BootReceiver">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.USER_PRESENT" />
+                <action android:name="com.vinson.addev.wsservice.restart" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>

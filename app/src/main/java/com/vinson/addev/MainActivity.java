@@ -32,7 +32,6 @@ public class MainActivity extends AppCompatActivity {
     private IconicsDrawable mNetworkStateDrawable;
     private Handler mHandler = new Handler(this::handleMessage);
     private static final int MSG_NETWORK_CHANGE = 5;
-    WSService.Binder wsService;
 
     MaterialButton mBtnSensor;
 
@@ -55,9 +54,6 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        Intent intent = new Intent(this, WSService.class);
-        bindService(intent, mServiceConnection, BIND_AUTO_CREATE);
-
         mBtnSensor = findViewById(R.id.btn_sensors);
         initEvent();
 
@@ -73,34 +69,14 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        this.startService(new Intent(this, WSService.class));
+        MainActivity.this.finish();
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
     }
-
-    private ServiceConnection mServiceConnection = new ServiceConnection() {
-        @Override
-        public void onServiceConnected(ComponentName name, IBinder service) {
-            Log.d(TAG, "onServiceConnected");
-            wsService = (WSService.Binder) service;
-            mHandler.post(() -> {
-                if (wsService.networkAvailable()) {
-                    mNetworkStateDrawable.icon(CommunityMaterial.Icon2.cmd_wifi).color(Color.GREEN);
-                } else {
-                    mNetworkStateDrawable.icon(CommunityMaterial.Icon2.cmd_wifi_off).color(Color.RED);
-                }
-            });
-        }
-
-        @Override
-        public void onServiceDisconnected(ComponentName name) {
-            Log.d(TAG, "onServiceDisconnected");
-            wsService.setCallback(null);
-            wsService = null;
-        }
-    };
 
     private boolean handleMessage(Message msg) {
         if (isFinishing() || isDestroyed()) return true;

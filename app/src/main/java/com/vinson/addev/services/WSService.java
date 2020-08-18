@@ -9,6 +9,7 @@ import android.net.NetworkRequest;
 import android.os.Binder;
 import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.Message;
 import android.util.Log;
 
@@ -23,6 +24,8 @@ import com.vinson.addev.utils.Constants;
 
 import org.json.JSONObject;
 
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -70,8 +73,21 @@ public class WSService extends Service {
         NetworkInfo networkInfo = mConnectivityManager.getActiveNetworkInfo();
         mNetworkAvailable = (networkInfo != null && networkInfo.isConnected());
         mConnectivityManager.registerNetworkCallback(new NetworkRequest.Builder().build(), mNetworkCallback);
-
         mGson = new Gson();
+
+        new Timer().scheduleAtFixedRate(new TimerTask() {
+            @Override
+            public void run() {
+                Log.d(TAG, "wsservice alive");
+            }
+        }, 1000, 10000);
+    }
+
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        Log.d(TAG, "onStartCommand: [flags]" + flags + ", [startId]" + startId);
+        Log.d(TAG, intent.toString());
+        return super.onStartCommand(intent, flags, startId);
     }
 
     @Nullable
@@ -87,11 +103,13 @@ public class WSService extends Service {
 
     @Override
     public void onDestroy() {
-        super.onDestroy();
-
         mThreadPool.shutdown();
         mThreadPool = null;
         mConnectivityManager.unregisterNetworkCallback(mNetworkCallback);
+
+        //TODO start service before destroy
+        this.sendBroadcast(new Intent("com.vinson.addev.wsservice.restart"));
+        super.onDestroy();
     }
 
     private ConnectivityManager.NetworkCallback mNetworkCallback = new ConnectivityManager.NetworkCallback() {
@@ -317,4 +335,6 @@ public class WSService extends Service {
             }
         }
     };
+
+
 }

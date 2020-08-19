@@ -1,26 +1,22 @@
 package com.vinson.addev.services;
 
-import android.app.Service;
 import android.content.Intent;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkInfo;
 import android.net.NetworkRequest;
-import android.os.Binder;
 import android.os.Handler;
 import android.os.IBinder;
-import android.os.Looper;
-import android.os.Message;
 import android.util.Log;
 
 import androidx.annotation.Nullable;
 
 import com.google.gson.Gson;
-import com.google.gson.JsonObject;
 import com.vinson.addev.App;
 import com.vinson.addev.model.ws.WSEvent;
 import com.vinson.addev.tools.Config;
 import com.vinson.addev.utils.Constants;
+import com.xdandroid.hellodaemon.AbsWorkService;
 
 import org.json.JSONObject;
 
@@ -38,7 +34,7 @@ import okhttp3.Request;
 import okhttp3.WebSocket;
 import okhttp3.WebSocketListener;
 
-public class WSService extends Service {
+public class WSService extends AbsWorkService {
     public static final String TAG = WSService.class.getSimpleName();
 
     private static final int REQUEST_RETRY_DELAY = 30 * 1000;
@@ -63,6 +59,75 @@ public class WSService extends Service {
     private WebSocket mWebSocket;
     private Gson mGson;
     private String pushStreamRequester;
+    IZegoEventHandler eventHandler = new IZegoEventHandler() {
+        @Override
+        public void onPublisherStateUpdate(String streamID, ZegoPublisherState state, int errorCode, JSONObject extendedData) {
+            super.onPublisherStateUpdate(streamID, state, errorCode, extendedData);
+            Log.d(TAG, state + "");
+            if (state.equals(ZegoPublisherState.PUBLISHING)) {
+                WSEvent event = new WSEvent();
+                event.target = new String[]{pushStreamRequester};
+                event.what = "push.stream.success";
+                event.data = "streamid:" + streamID;
+                mWebSocket.send(mGson.toJson(event));
+            }
+        }
+    };
+    private Handler mHandler = new Handler(msg -> {
+        if (mStopped) {
+            Log.w(TAG, "DataLoader stopped, ignore msg:" + msg.what);
+            return true;
+        }
+        switch (msg.what) {
+            case MSG_RETRY_RECORD:
+//                retryRecord();
+                break;
+            case MSG_LOAD_AUTHORITY:
+//                loadAuthority();
+                break;
+            case MSG_LOAD_CONFIG:
+//                loadConfig();
+                break;
+            case MSG_OPEN_WEBSOCKET:
+                if (mThreadPool != null && !mThreadPool.isShutdown())
+                    mThreadPool.execute(this::openWebSocket);
+                break;
+            case MSG_UPLOAD_DUMP_FILES:
+                if (mThreadPool != null && !mThreadPool.isShutdown())
+//                    mThreadPool.execute(this::uploadDumpFiles);
+                    break;
+            case MSG_UPLOAD_LOGS:
+                if (mThreadPool != null && !mThreadPool.isShutdown())
+//                    mThreadPool.execute(this::uploadLogs);
+                    break;
+            case MSG_SCHEDULE_TASKS:
+//                timerTask();
+                break;
+            case MSG_START_PUSH_STREAM:
+                // TODO push stream
+                startPushStream();
+        }
+        return true;
+    });
+    private ConnectivityManager.NetworkCallback mNetworkCallback = new ConnectivityManager.NetworkCallback() {
+        @Override
+        public void onAvailable(Network network) {
+            Log.w(TAG, "network available");
+            mNetworkAvailable = true;
+            App.getInstance().showToast("网络已连接");
+            start();
+            mCallback.onNetworkChanged(true);
+        }
+
+        @Override
+        public void onLost(Network network) {
+            Log.w(TAG, "network lost");
+            mNetworkAvailable = false;
+            App.getInstance().showToast("网络已断开");
+            stop();
+            mCallback.onNetworkChanged(false);
+        }
+    };
 
     @Override
     public void onCreate() {
@@ -112,26 +177,6 @@ public class WSService extends Service {
         super.onDestroy();
     }
 
-    private ConnectivityManager.NetworkCallback mNetworkCallback = new ConnectivityManager.NetworkCallback() {
-        @Override
-        public void onAvailable(Network network) {
-            Log.w(TAG, "network available");
-            mNetworkAvailable = true;
-            App.getInstance().showToast("网络已连接");
-            start();
-            mCallback.onNetworkChanged(true);
-        }
-
-        @Override
-        public void onLost(Network network) {
-            Log.w(TAG, "network lost");
-            mNetworkAvailable = false;
-            App.getInstance().showToast("网络已断开");
-            stop();
-            mCallback.onNetworkChanged(false);
-        }
-    };
-
     private void start() {
         mStopped = false;
         // 1. load device config
@@ -148,38 +193,6 @@ public class WSService extends Service {
         mHandler.removeCallbacksAndMessages(null);
         // report device offline
         // close websocket
-    }
-
-    public class Binder extends android.os.Binder {
-
-        public void setCallback(WSService.Callback callback) {
-            mCallback = callback;
-        }
-
-        public boolean networkAvailable() {
-            return mNetworkAvailable;
-        }
-    }
-
-    public static class Callback {
-        public void onInfo(String tips, boolean loading, int delay) {
-        }
-
-
-        public void onStaffRemoved(int[] staffIdArray) {
-        }
-
-        public void onAuthorityUpdate() {
-        }
-
-        public void onDeviceRemoved() {
-        }
-
-        public void onUpgrade(String bootlegs) {
-        }
-
-        public void onNetworkChanged(boolean connected) {
-        }
     }
 
     private void closeWebSocket() {
@@ -270,43 +283,6 @@ public class WSService extends Service {
         client.dispatcher().executorService().shutdown();
     }
 
-    private Handler mHandler = new Handler(msg -> {
-        if (mStopped) {
-            Log.w(TAG, "DataLoader stopped, ignore msg:" + msg.what);
-            return true;
-        }
-        switch (msg.what) {
-            case MSG_RETRY_RECORD:
-//                retryRecord();
-                break;
-            case MSG_LOAD_AUTHORITY:
-//                loadAuthority();
-                break;
-            case MSG_LOAD_CONFIG:
-//                loadConfig();
-                break;
-            case MSG_OPEN_WEBSOCKET:
-                if (mThreadPool != null && !mThreadPool.isShutdown())
-                    mThreadPool.execute(this::openWebSocket);
-                break;
-            case MSG_UPLOAD_DUMP_FILES:
-                if (mThreadPool != null && !mThreadPool.isShutdown())
-//                    mThreadPool.execute(this::uploadDumpFiles);
-                break;
-            case MSG_UPLOAD_LOGS:
-                if (mThreadPool != null && !mThreadPool.isShutdown())
-//                    mThreadPool.execute(this::uploadLogs);
-                break;
-            case MSG_SCHEDULE_TASKS:
-//                timerTask();
-                break;
-            case MSG_START_PUSH_STREAM:
-                // TODO push stream
-                startPushStream();
-        }
-        return true;
-    });
-
     void startPushStream() {
         String mStreamId = Config.getDeviceSerial();
         Config.setStreamId(Config.getDeviceSerial());
@@ -321,20 +297,66 @@ public class WSService extends Service {
         App.getEngine().startPublishingStream(mStreamId);
     }
 
-    IZegoEventHandler eventHandler = new IZegoEventHandler() {
-        @Override
-        public void onPublisherStateUpdate(String streamID, ZegoPublisherState state, int errorCode, JSONObject extendedData) {
-            super.onPublisherStateUpdate(streamID, state, errorCode, extendedData);
-            Log.d(TAG, state + "");
-            if (state.equals(ZegoPublisherState.PUBLISHING)) {
-                WSEvent event = new WSEvent();
-                event.target = new String[]{pushStreamRequester};
-                event.what = "push.stream.success";
-                event.data = "streamid:" + streamID;
-                mWebSocket.send(mGson.toJson(event));
-            }
+    @Override
+    public Boolean shouldStopService(Intent intent, int flags, int startId) {
+        return null;
+    }
+
+    @Override
+    public void startWork(Intent intent, int flags, int startId) {
+
+    }
+
+    @Override
+    public void stopWork(Intent intent, int flags, int startId) {
+
+    }
+
+    @Override
+    public Boolean isWorkRunning(Intent intent, int flags, int startId) {
+        return null;
+    }
+
+    @Nullable
+    @Override
+    public IBinder onBind(Intent intent, Void alwaysNull) {
+        return null;
+    }
+
+    @Override
+    public void onServiceKilled(Intent rootIntent) {
+
+    }
+
+    public static class Callback {
+        public void onInfo(String tips, boolean loading, int delay) {
         }
-    };
 
 
+        public void onStaffRemoved(int[] staffIdArray) {
+        }
+
+        public void onAuthorityUpdate() {
+        }
+
+        public void onDeviceRemoved() {
+        }
+
+        public void onUpgrade(String bootlegs) {
+        }
+
+        public void onNetworkChanged(boolean connected) {
+        }
+    }
+
+    public class Binder extends android.os.Binder {
+
+        public void setCallback(WSService.Callback callback) {
+            mCallback = callback;
+        }
+
+        public boolean networkAvailable() {
+            return mNetworkAvailable;
+        }
+    }
 }

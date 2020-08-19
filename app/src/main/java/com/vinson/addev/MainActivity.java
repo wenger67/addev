@@ -69,7 +69,6 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        this.startService(new Intent(this, WSService.class));
         MainActivity.this.finish();
     }
 

@@ -2,11 +2,14 @@ package com.vinson.addev;
 
 import android.app.Application;
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.util.Log;
 
+import com.vinson.addev.services.WSService;
 import com.vinson.addev.tools.CrashHandler;
 import com.vinson.addev.utils.ToastCompat;
+import com.xdandroid.hellodaemon.DaemonEnv;
 
 import im.zego.zegoexpress.ZegoExpressEngine;
 import im.zego.zegoexpress.constants.ZegoScenario;
@@ -24,6 +27,10 @@ public class App extends Application {
         sp = getSharedPreferences(SP_NAME, Context.MODE_PRIVATE);
         // register crash handler
         CrashHandler.getInstance().init();
+
+        // daemon service
+        DaemonEnv.initialize(this, WSService.class, null);
+        this.startService(new Intent(this, WSService.class));
 
         ENGINE = ZegoExpressEngine.createEngine(BuildConfig.ZegoAppId, BuildConfig.ZegoAppSign,
                 true, ZegoScenario.GENERAL, this, null);

@@ -116,7 +116,9 @@ dependencies {
     implementation "com.github.nisrulz:easydeviceinfo-base:2.4.1"   // 传感器
     implementation 'com.github.nisrulz:sensey:1.0.1'    // sensor event
 
-    implementation project(":DaemonService")
+    implementation 'com.github.zhaokaiqiang.klog:library:1.6.0' // logcat
+    implementation 'com.xdandroid:hellodaemon:1.2.2' // daemon service
+    implementation('org.tensorflow:tensorflow-lite:0.0.0-nightly') { changing = true }
 
     testImplementation 'junit:junit:4.12'
     androidTestImplementation 'androidx.test.ext:junit:1.1.1'

@@ -1,17 +1,20 @@
 package com.vinson.addev.services;
 
 import android.content.Intent;
+import android.hardware.Camera;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkInfo;
 import android.net.NetworkRequest;
 import android.os.Handler;
 import android.os.IBinder;
+import android.os.ResultReceiver;
 import android.util.Log;
 
 import androidx.annotation.Nullable;
 
 import com.google.gson.Gson;
+import com.socks.library.KLog;
 import com.vinson.addev.App;
 import com.vinson.addev.model.ws.WSEvent;
 import com.vinson.addev.tools.Config;
@@ -26,6 +29,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
+import im.zego.zegoexpress.ZegoExpressEngine;
 import im.zego.zegoexpress.callback.IZegoEventHandler;
 import im.zego.zegoexpress.constants.ZegoPublisherState;
 import im.zego.zegoexpress.entity.ZegoUser;
@@ -139,13 +143,20 @@ public class WSService extends AbsWorkService {
         mNetworkAvailable = (networkInfo != null && networkInfo.isConnected());
         mConnectivityManager.registerNetworkCallback(new NetworkRequest.Builder().build(), mNetworkCallback);
         mGson = new Gson();
-
-        new Timer().scheduleAtFixedRate(new TimerTask() {
+        mHandler.post(new Runnable() {
             @Override
             public void run() {
-                Log.d(TAG, "wsservice alive");
+                new Timer().scheduleAtFixedRate(new TimerTask() {
+                    @Override
+                    public void run() {
+                        Log.d(TAG, "wsservice alive");
+                    }
+                }, 1000, 10000);
             }
-        }, 1000, 10000);
+        });
+
+//        ZegoExpressEngine.destroyEngine(null);
+        RecorderService.startToStartRecording(this, Camera.CameraInfo.CAMERA_FACING_FRONT, new ResultReceiver(mHandler));
     }
 
     @Override
@@ -185,7 +196,7 @@ public class WSService extends AbsWorkService {
         // 3. upload records that record when disconnect or upload faield
         // 4. schedule tasks
 
-        App.getEngine().setEventHandler(eventHandler);
+//        App.getEngine().setEventHandler(eventHandler);
     }
 
     private void stop() {

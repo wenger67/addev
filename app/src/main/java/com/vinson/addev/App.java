@@ -6,6 +6,8 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.util.Log;
 
+import com.socks.library.KLog;
+import com.vinson.addev.services.RecorderService;
 import com.vinson.addev.services.WSService;
 import com.vinson.addev.tools.CrashHandler;
 import com.vinson.addev.utils.ToastCompat;
@@ -28,12 +30,14 @@ public class App extends Application {
         // register crash handler
         CrashHandler.getInstance().init();
 
+        KLog.init(true);
+
         // daemon service
         DaemonEnv.initialize(this, WSService.class, null);
         this.startService(new Intent(this, WSService.class));
 
-        ENGINE = ZegoExpressEngine.createEngine(BuildConfig.ZegoAppId, BuildConfig.ZegoAppSign,
-                true, ZegoScenario.GENERAL, this, null);
+//        ENGINE = ZegoExpressEngine.createEngine(BuildConfig.ZegoAppId, BuildConfig.ZegoAppSign,
+//                true, ZegoScenario.GENERAL, this, null);
     }
 
     public static App getInstance() {

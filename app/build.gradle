@@ -1,4 +1,5 @@
 apply plugin: 'com.android.application'
+apply plugin: 'de.undercouch.download'
 
 static def gitVersion() {
     def cmd = 'git rev-list HEAD --first-parent --count'
@@ -90,12 +91,31 @@ android {
         targetCompatibility JavaVersion.VERSION_1_8
     }
 
+    aaptOptions {
+        noCompress "tflite"
+    }
+
+    lintOptions {
+        abortOnError false
+    }
+
     packagingOptions {
         exclude 'META-INF/LICENSE.md'
         exclude 'META-INF/NOTICE.md'
         exclude 'META-INF/NOTICE.markdown'
     }
 }
+
+// import DownloadModels task
+project.ext.ASSET_DIR = projectDir.toString() + '/src/main/assets'
+project.ext.TMP_DIR   = project.buildDir.toString() + '/downloads'
+
+// Download default models; if you wish to use your own models then
+// place them in the "assets" directory and comment out this line.
+//apply from: "download_model.gradle"
+
+apply from:'download_model.gradle'
+
 
 dependencies {
     implementation fileTree(dir: "libs", include: ["*.jar"])
@@ -118,7 +138,8 @@ dependencies {
 
     implementation 'com.github.zhaokaiqiang.klog:library:1.6.0' // logcat
     implementation 'com.xdandroid:hellodaemon:1.2.2' // daemon service
-    implementation('org.tensorflow:tensorflow-lite:0.0.0-nightly') { changing = true }
+
+    implementation('org.tensorflow:tensorflow-lite:2.3.0') { changing = true }
 
     testImplementation 'junit:junit:4.12'
     androidTestImplementation 'androidx.test.ext:junit:1.1.1'

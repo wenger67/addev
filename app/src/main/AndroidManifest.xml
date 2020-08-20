@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     package="com.vinson.addev">
 
     <!-- SDK 必须使用的权限 -->
@@ -44,6 +45,13 @@
         <activity android:name=".MainActivity"/>
         <activity android:name=".VideoRoomActivity"/>
         <activity android:name=".SensorActivity"/>
+
+        <activity
+            android:name=".tesnsorflowlite.DetectorActivity"
+            android:label="@string/tfe_od_app_name"
+            android:theme="@style/ObjectDetection"
+            android:screenOrientation="portrait">
+        </activity>
 
         <service android:name=".services.WSService"
             android:enabled="true"

@@ -19,6 +19,8 @@ import com.google.android.material.button.MaterialButton;
 import com.mikepenz.community_material_typeface_library.CommunityMaterial;
 import com.mikepenz.iconics.IconicsDrawable;
 import com.vinson.addev.services.WSService;
+import com.vinson.addev.tesnsorflowlite.CameraActivity;
+import com.vinson.addev.tesnsorflowlite.DetectorActivity;
 import com.vinson.addev.tools.Config;
 import com.vinson.addev.tools.NetworkObserver;
 
@@ -62,14 +64,15 @@ public class MainActivity extends AppCompatActivity {
     private void initEvent() {
 
         mBtnSensor.setOnClickListener(v -> {
-            startActivity(new Intent(MainActivity.this, SensorActivity.class));
+//            startActivity(new Intent(MainActivity.this, SensorActivity.class));
+            startActivity(new Intent(MainActivity.this, DetectorActivity.class));
         });
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        MainActivity.this.finish();
+//        MainActivity.this.finish();
     }
 
     @Override

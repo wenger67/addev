@@ -156,7 +156,7 @@ public class WSService extends AbsWorkService {
         });
 
 //        ZegoExpressEngine.destroyEngine(null);
-        RecorderService.startToStartRecording(this, Camera.CameraInfo.CAMERA_FACING_FRONT, new ResultReceiver(mHandler));
+        RecorderService.startObjectDetect(this);
     }
 
     @Override

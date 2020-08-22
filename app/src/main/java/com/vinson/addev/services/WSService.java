@@ -17,6 +17,7 @@ import com.google.gson.Gson;
 import com.socks.library.KLog;
 import com.vinson.addev.App;
 import com.vinson.addev.model.ws.WSEvent;
+import com.vinson.addev.serialport.SerialPortService;
 import com.vinson.addev.tools.Config;
 import com.vinson.addev.utils.Constants;
 import com.xdandroid.hellodaemon.AbsWorkService;
@@ -157,6 +158,8 @@ public class WSService extends AbsWorkService {
 
 //        ZegoExpressEngine.destroyEngine(null);
         RecorderService.startObjectDetect(this);
+        KLog.d("start SerialPortService");
+        startService(new Intent(this, SerialPortService.class));
     }
 
     @Override

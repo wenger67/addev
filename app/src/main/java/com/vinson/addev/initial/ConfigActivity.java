@@ -25,6 +25,7 @@ import com.google.gson.JsonParser;
 import com.google.gson.reflect.TypeToken;
 import com.mikepenz.community_material_typeface_library.CommunityMaterial;
 import com.mikepenz.iconics.IconicsDrawable;
+import com.socks.library.KLog;
 import com.vinson.addev.App;
 import com.vinson.addev.R;
 import com.vinson.addev.SplashActivity;
@@ -73,6 +74,7 @@ public class ConfigActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
+        KLog.d();
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_config);
 
@@ -121,8 +123,7 @@ public class ConfigActivity extends AppCompatActivity {
             if (mDeviceId.isEmpty()) {
                 App.getInstance().showToast("Device ID can not be empty!");
             } else {
-                DataHelper dataHelper = new DataHelper(Constants.BASE_URL);
-                dataHelper.getDevice(Integer.parseInt(mDeviceId)).enqueue(new Callback<ResponseBody>() {
+                DataHelper.getInstance().getDevice(Integer.parseInt(mDeviceId)).enqueue(new Callback<ResponseBody>() {
                     @Override
                     @EverythingIsNonNull
                     public void onResponse(Call<ResponseBody> call, Response<ResponseBody> response) {
@@ -166,6 +167,7 @@ public class ConfigActivity extends AppCompatActivity {
 
     @Override
     protected void onResume() {
+        KLog.d();
         super.onResume();
     }
 

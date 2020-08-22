@@ -139,6 +139,8 @@ dependencies {
     implementation 'com.github.zhaokaiqiang.klog:library:1.6.0' // logcat
     implementation 'com.xdandroid:hellodaemon:1.2.2' // daemon service
 
+    implementation 'com.github.javafaker:javafaker:1.0.2' // fake data
+
     implementation('org.tensorflow:tensorflow-lite:2.3.0') { changing = true }
 
     testImplementation 'junit:junit:4.12'

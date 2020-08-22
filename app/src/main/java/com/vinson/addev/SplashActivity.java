@@ -8,6 +8,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
+import android.provider.Settings;
 import android.util.Log;
 import android.view.View;
 import android.widget.ImageView;
@@ -17,14 +18,13 @@ import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
 
-import com.google.android.material.imageview.ShapeableImageView;
 import com.google.android.material.textview.MaterialTextView;
 import com.mikepenz.community_material_typeface_library.CommunityMaterial;
 import com.mikepenz.iconics.IconicsDrawable;
+import com.socks.library.KLog;
 import com.vinson.addev.initial.ConfigActivity;
 import com.vinson.addev.tools.Config;
 import com.vinson.addev.tools.NetworkObserver;
-import com.vinson.addev.utils.Constants;
 import com.wang.avi.AVLoadingIndicatorView;
 
 public class SplashActivity extends AppCompatActivity {
@@ -42,16 +42,15 @@ public class SplashActivity extends AppCompatActivity {
     private static final int MSG_ERROR_VERIFY_FAILED = 3;
     private static final int MSG_VERIFY_DEVICE = 4;
     private static final int MSG_NETWORK_CHANGE = 5;
-
+    ImageView mNetworkStateView;
     private boolean mPermissionGranted = false;
-    private Handler mHandler = new Handler(this::handleMessage);
     private boolean mSplashDone = false;
     private NetworkObserver mNetwork;
-    ImageView mNetworkStateView;
     private IconicsDrawable mNetworkStateDrawable;
     private AVLoadingIndicatorView mLoadingView;
     private MaterialTextView mTipsView;
     private int mTick;
+    private Handler mHandler = new Handler(this::handleMessage);
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -81,23 +80,41 @@ public class SplashActivity extends AppCompatActivity {
 
     @Override
     protected void onResume() {
+        KLog.d();
         super.onResume();
-        if (!Config.getConfiged()) {
-            // launch configactivity
-            mHandler.removeCallbacksAndMessages(null);
-            mHandler.sendEmptyMessage(MSG_LAUNCH_CONFIG);
-        }
+
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (checkPermission()) {
-                mHandler.removeMessages(MSG_VERIFY_DEVICE);
-                mHandler.sendEmptyMessage(MSG_VERIFY_DEVICE);
+            if (!Settings.canDrawOverlays(SplashActivity.this)) {
+                KLog.d("canDrawOverlays");
+                Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION);
+                startActivity(intent);
             } else {
-                Log.w(TAG, "permission not granted, raise up request tips");
-                requestPermissions(mPermissions, REQUEST_CODE_DEFAULT);
+                if (checkPermission()) {
+                    if (!Config.getConfiged()) {
+                        KLog.d("configactivity");
+                        // launch configactivity
+                        mHandler.removeCallbacksAndMessages(null);
+                        mHandler.sendEmptyMessage(MSG_LAUNCH_CONFIG);
+                    } else {
+                        mHandler.removeMessages(MSG_VERIFY_DEVICE);
+                        mHandler.sendEmptyMessage(MSG_VERIFY_DEVICE);
+                    }
+                } else {
+                    Log.w(TAG, "permission not granted, raise up request tips");
+                    requestPermissions(mPermissions, REQUEST_CODE_DEFAULT);
+                }
             }
         } else {
-            mHandler.removeMessages(MSG_VERIFY_DEVICE);
-            mHandler.sendEmptyMessage(MSG_VERIFY_DEVICE);
+            if (!Config.getConfiged()) {
+                KLog.d("configactivity");
+                // launch configactivity
+                mHandler.removeCallbacksAndMessages(null);
+                mHandler.sendEmptyMessage(MSG_LAUNCH_CONFIG);
+            } else {
+                mHandler.removeMessages(MSG_VERIFY_DEVICE);
+                mHandler.sendEmptyMessage(MSG_VERIFY_DEVICE);
+            }
         }
     }
 
@@ -163,6 +180,8 @@ public class SplashActivity extends AppCompatActivity {
 
         // TODO request device info
         // TODO if request failed, then retry by set mTick and send MSG_ERROR_VERIFY_FAILED
+
+        App.getInstance().startWSService();
 
         // TODO verify succuss, launch mainactivity
         mHandler.removeCallbacksAndMessages(null);

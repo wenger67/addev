@@ -34,7 +34,6 @@ public class App extends Application {
 
         // daemon service
         DaemonEnv.initialize(this, WSService.class, null);
-        this.startService(new Intent(this, WSService.class));
 
 //        ENGINE = ZegoExpressEngine.createEngine(BuildConfig.ZegoAppId, BuildConfig.ZegoAppSign,
 //                true, ZegoScenario.GENERAL, this, null);
@@ -42,6 +41,10 @@ public class App extends Application {
 
     public static App getInstance() {
         return INSTANCE;
+    }
+
+    public void startWSService() {
+        this.startService(new Intent(this, WSService.class));
     }
 
     public static ZegoExpressEngine getEngine() {

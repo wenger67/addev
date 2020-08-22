@@ -63,6 +63,7 @@
         </service>
 
         <service android:name=".services.RecorderService"/>
+        <service android:name=".serialport.SerialPortService"/>
 
         <receiver android:name=".receiver.BootReceiver">
             <intent-filter>

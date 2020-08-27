@@ -1,8 +1,10 @@
 package com.vinson.addev.services;
 
+import android.Manifest;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
@@ -47,8 +49,11 @@ import android.view.SurfaceView;
 import android.view.TextureView;
 import android.view.WindowManager;
 
+import androidx.core.app.ActivityCompat;
+
 import com.socks.library.KLog;
 import com.vinson.addev.R;
+import com.vinson.addev.data.DataHelper;
 import com.vinson.addev.tesnsorflowlite.customview.AutoFitTextureView;
 import com.vinson.addev.tesnsorflowlite.env.ImageUtils;
 import com.vinson.addev.tesnsorflowlite.tflite.Classifier;
@@ -74,6 +79,14 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
+import okhttp3.MediaType;
+import okhttp3.MultipartBody;
+import okhttp3.RequestBody;
+import okhttp3.ResponseBody;
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
+
 import static com.vinson.addev.utils.TfLiteUtil.MINIMUM_CONFIDENCE_TF_OD_API;
 import static com.vinson.addev.utils.TfLiteUtil.TF_OD_API_INPUT_SIZE;
 import static com.vinson.addev.utils.TfLiteUtil.TF_OD_API_IS_QUANTIZED;
@@ -96,12 +109,15 @@ public class RecorderService extends Service {
     private static final int COMMAND_START_RECORDING = 0;
     private static final int COMMAND_STOP_RECORDING = 1;
     private static final int MSG_PROCESS_PREVIEW_CALLBACK = 101;
+    private static final int MSG_READY_TO_UPLOAD = 10;
+
     private static final String SELECTED_CAMERA_FOR_RECORDING = "cameraForRecording";
     private static final boolean SAVE_IMAGE = false;
     private static final boolean RECORD_VIDEO = false;
-    private static final boolean SAVE_PREVIEW_BITMAP = false;
+    private static boolean SAVE_PREVIEW_BITMAP = false;
     private static final int MINIMUM_PREVIEW_SIZE = 320;
     private static final Size DESIRED_PREVIEW_SIZE = new Size(640, 480);
+    private static final boolean MAINTAIN_ASPECT = false;
     private final Semaphore cameraOpenCloseLock = new Semaphore(1);
     private final CameraCaptureSession.CaptureCallback captureCallback =
             new CameraCaptureSession.CaptureCallback() {
@@ -123,6 +139,7 @@ public class RecorderService extends Service {
     protected int previewHeight = 0;
     AutoFitTextureView textureView;
     String mCameraId;
+    SurfaceTexture surfaceTexture;
     private int mPreviewWidth;
     private int mPreviewHeight;
     private Camera mCamera;
@@ -133,19 +150,6 @@ public class RecorderService extends Service {
     private Handler mHandler;
     private HandlerThread mHandlerThread;
     private Queue<byte[]> imageList = new ConcurrentLinkedQueue<>();
-    private Handler.Callback callback = (msg -> {
-        switch (msg.what) {
-            case MSG_PROCESS_PREVIEW_CALLBACK:
-                imageList.add((byte[]) msg.obj);
-                if (mThreadPool != null && !mThreadPool.isShutdown())
-                    mThreadPool.execute(this::saveImage);
-                break;
-            default:
-                KLog.w("unknown message " + msg.what);
-                break;
-        }
-        return false;
-    });
     /**
      * Used to take picture.
      */
@@ -185,71 +189,90 @@ public class RecorderService extends Service {
     private Bitmap croppedBitmap = null;
     private Bitmap cropCopyBitmap = null;
     private Runnable postInferenceCallback;
-    ImageReader.OnImageAvailableListener imageListener =
-            new ImageReader.OnImageAvailableListener() {
-        @Override
-        public void onImageAvailable(final ImageReader reader) {
-            KLog.d();
-            // We need wait until we have some size from onPreviewSizeChosen
-            long start = System.currentTimeMillis();
-            if (previewWidth == 0 || previewHeight == 0) {
-                return;
-            }
-            if (rgbBytes == null) {
-                rgbBytes = new int[previewWidth * previewHeight];
-            }
-            try {
-                final Image image = reader.acquireLatestImage();
-                if (image == null) {
-                    return;
-                }
-                if (isProcessingFrame) {
-                    image.close();
-                    return;
-                }
-                isProcessingFrame = true;
-                final Image.Plane[] planes = image.getPlanes();
-                fillBytes(planes, yuvBytes);
-                yRowStride = planes[0].getRowStride();
-                final int uvRowStride = planes[1].getRowStride();
-                final int uvPixelStride = planes[1].getPixelStride();
 
-                imageConverter =
-                        new Runnable() {
-                            @Override
-                            public void run() {
-                                ImageUtils.convertYUV420ToARGB8888(
-                                        yuvBytes[0],
-                                        yuvBytes[1],
-                                        yuvBytes[2],
-                                        previewWidth,
-                                        previewHeight,
-                                        yRowStride,
-                                        uvRowStride,
-                                        uvPixelStride,
-                                        rgbBytes);
-                            }
-                        };
-
-                postInferenceCallback =
-                        new Runnable() {
-                            @Override
-                            public void run() {
-                                image.close();
-                                isProcessingFrame = false;
-                            }
-                        };
-                KLog.d("cost: " + (System.currentTimeMillis() - start));
-                processImage();
-            } catch (final Exception e) {
-                KLog.e("Exception!");
-                return;
-            }
-            Trace.endSection();
+    private List<File> filesToUpload = new ArrayList<>(4);  // bitmaps wait for upload
+    private Handler.Callback callback = (msg -> {
+        switch (msg.what) {
+            case MSG_PROCESS_PREVIEW_CALLBACK:
+                imageList.add((byte[]) msg.obj);
+                if (mThreadPool != null && !mThreadPool.isShutdown())
+                    mThreadPool.execute(this::saveImage);
+                break;
+            case MSG_READY_TO_UPLOAD:
+                if (mThreadPool != null && !mThreadPool.isShutdown())
+                    mThreadPool.execute(this::uploadBitmaps);
+                break;
+            default:
+                KLog.w("unknown message " + msg.what);
+                break;
         }
-     };
+        return false;
+    });
+    private boolean storeBitmaps = false;
     private Integer sensorOrientation;
     private Size previewSize;
+    private Matrix frameToCropTransform;
+    ImageReader.OnImageAvailableListener imageListener =
+            new ImageReader.OnImageAvailableListener() {
+                @Override
+                public void onImageAvailable(final ImageReader reader) {
+                    // We need wait until we have some size from onPreviewSizeChosen
+                    if (previewWidth == 0 || previewHeight == 0) {
+                        return;
+                    }
+                    if (rgbBytes == null) {
+                        rgbBytes = new int[previewWidth * previewHeight];
+                    }
+                    try {
+                        final Image image = reader.acquireLatestImage();
+                        if (image == null) {
+                            return;
+                        }
+
+                        if (isProcessingFrame) {
+                            image.close();
+                            return;
+                        }
+                        isProcessingFrame = true;
+                        final Image.Plane[] planes = image.getPlanes();
+                        fillBytes(planes, yuvBytes);
+                        yRowStride = planes[0].getRowStride();
+                        final int uvRowStride = planes[1].getRowStride();
+                        final int uvPixelStride = planes[1].getPixelStride();
+
+                        imageConverter =
+                                new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        ImageUtils.convertYUV420ToARGB8888(
+                                                yuvBytes[0],
+                                                yuvBytes[1],
+                                                yuvBytes[2],
+                                                previewWidth,
+                                                previewHeight,
+                                                yRowStride,
+                                                uvRowStride,
+                                                uvPixelStride,
+                                                rgbBytes);
+                                    }
+                                };
+
+                        postInferenceCallback =
+                                new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        image.close();
+                                        isProcessingFrame = false;
+                                    }
+                                };
+                        processImage();
+                    } catch (final Exception e) {
+                        KLog.e("Exception!");
+                        return;
+                    }
+                    Trace.endSection();
+                }
+            };
     private final CameraDevice.StateCallback stateCallback =
             new CameraDevice.StateCallback() {
                 @Override
@@ -275,31 +298,33 @@ public class RecorderService extends Service {
                     cameraDevice = null;
                 }
             };
-    SurfaceTexture surfaceTexture;
     TextureView.SurfaceTextureListener surfaceTextureListener =
             new TextureView.SurfaceTextureListener() {
-        @Override
-        public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
-            KLog.d();
-            surfaceTexture = surface;
-            openCamera(width, height);
-        }
+                @Override
+                public void onSurfaceTextureAvailable(SurfaceTexture surface, int width,
+                                                      int height) {
+                    KLog.d();
+                    surfaceTexture = surface;
+                    openCamera(width, height);
+                }
 
-        @Override
-        public void onSurfaceTextureSizeChanged(SurfaceTexture surface, int width, int height) {
-            // TODO
-        }
+                @Override
+                public void onSurfaceTextureSizeChanged(SurfaceTexture surface, int width,
+                                                        int height) {
+                    // TODO
+                }
 
-        @Override
-        public boolean onSurfaceTextureDestroyed(SurfaceTexture surface) {
-            return false;
-        }
+                @Override
+                public boolean onSurfaceTextureDestroyed(SurfaceTexture surface) {
+                    return false;
+                }
 
-        @Override
-        public void onSurfaceTextureUpdated(SurfaceTexture surface) {
+                @Override
+                public void onSurfaceTextureUpdated(SurfaceTexture surface) {
 
-        }
-    };
+                }
+            };
+
     public RecorderService() {
     }
 
@@ -374,6 +399,44 @@ public class RecorderService extends Service {
             KLog.e("Couldn't find any suitable preview size");
             return choices[0];
         }
+    }
+
+    private void uploadBitmaps() {
+        List<MultipartBody.Part> files = new ArrayList<>();
+        for (File file : filesToUpload) {
+            RequestBody requestFile = RequestBody.create(MediaType.parse("multipart/form-data"), file);
+            MultipartBody.Part part = MultipartBody.Part.createFormData("files", "fileName.png",
+                    requestFile);
+            files.add(part);
+        }
+
+        KLog.d("######start");
+        DataHelper.getInstance().uploadFiles("local", files).enqueue(new Callback<ResponseBody>() {
+            @Override
+            public void onResponse(Call<ResponseBody> call, Response<ResponseBody> response) {
+                KLog.d("######success");
+                clearFiles();
+                try {
+                    assert response.body() != null;
+                    KLog.d(response.body().string());
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+
+            @Override
+            public void onFailure(Call<ResponseBody> call, Throwable t) {
+                clearFiles();
+                KLog.d(t.getMessage());
+            }
+        });
+    }
+
+    private void clearFiles() {
+        for (File file: filesToUpload) {
+            if (file.exists()) file.delete();
+        }
+        filesToUpload.clear();
     }
 
     @Override
@@ -590,7 +653,6 @@ public class RecorderService extends Service {
 
     private void handleObjectDetectCommand() {
 
-
         WindowManager wm = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
         WindowManager.LayoutParams params = new WindowManager.LayoutParams(1, 1,
                 WindowManager.LayoutParams.TYPE_SYSTEM_OVERLAY,
@@ -614,6 +676,16 @@ public class RecorderService extends Service {
         try {
             if (!cameraOpenCloseLock.tryAcquire(2500, TimeUnit.MILLISECONDS)) {
                 throw new RuntimeException("Time out waiting to lock camera opening.");
+            }
+            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+                // TODO: Consider calling
+                //    ActivityCompat#requestPermissions
+                // here to request the missing permissions, and then overriding
+                //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+                //                                          int[] grantResults)
+                // to handle the case where the user grants the permission. See the documentation
+                // for ActivityCompat#requestPermissions for more details.
+                return;
             }
             manager.openCamera(mCameraId, stateCallback, mHandler);
         } catch (final CameraAccessException e) {
@@ -701,7 +773,6 @@ public class RecorderService extends Service {
         imageConverter.run();
         return rgbBytes;
     }
-    private Matrix frameToCropTransform;
 
     private void processImage() {
         KLog.d();
@@ -723,8 +794,12 @@ public class RecorderService extends Service {
         final Canvas canvas = new Canvas(croppedBitmap);
         canvas.drawBitmap(rgbFrameBitmap, frameToCropTransform, null);
         // For examining the actual TF input.
-        if (SAVE_PREVIEW_BITMAP) {
-            ImageUtils.saveBitmap(croppedBitmap);
+        if (SAVE_PREVIEW_BITMAP && filesToUpload.size() < 4) {
+            filesToUpload.add(ImageUtils.saveBitmap(croppedBitmap));
+            if (filesToUpload.size() == 4) {
+                mHandler.sendEmptyMessage(MSG_READY_TO_UPLOAD);
+                SAVE_PREVIEW_BITMAP = false;
+            }
         }
 
         runInBackground(
@@ -747,14 +822,18 @@ public class RecorderService extends Service {
                             final RectF location = result.getLocation();
                             if (location != null && result.getConfidence() >= MINIMUM_CONFIDENCE_TF_OD_API) {
                                 result.setLocation(location);
-                                KLog.d(result.toString());
+                                if (result.getTitle().equals("person")) {
+                                    KLog.d("recognise person: " + result.toString());
+                                    if (!SAVE_PREVIEW_BITMAP) SAVE_PREVIEW_BITMAP = true;
+                                }
                             }
                         }
 
                         computingDetection = false;
-                        KLog.d("origin: " + previewWidth + "x" + previewHeight);
-                        KLog.d("croped:" + cropCopyBitmap.getWidth() + "x" + cropCopyBitmap.getHeight());
-                        KLog.d("timecost:" + lastProcessingTimeMs + "ms");
+//                        KLog.d("origin: " + previewWidth + "x" + previewHeight);
+//                        KLog.d("croped:" + cropCopyBitmap.getWidth() + "x" + cropCopyBitmap
+//                        .getHeight());
+//                        KLog.d("timecost:" + lastProcessingTimeMs + "ms");
                     }
                 });
     }
@@ -845,7 +924,6 @@ public class RecorderService extends Service {
         }
         onPreviewSizeChosen(previewSize.getWidth(), previewSize.getHeight());
     }
-    private static final boolean MAINTAIN_ASPECT = false;
 
     private void onPreviewSizeChosen(int width, int height) {
         previewWidth = width;

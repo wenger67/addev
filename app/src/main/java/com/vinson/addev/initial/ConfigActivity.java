@@ -54,8 +54,6 @@ import retrofit2.Response;
  */
 public class ConfigActivity extends AppCompatActivity {
 
-    public static final String TAG = ConfigActivity.class.getSimpleName();
-
     private static final int MSG_LAUNCH = 1;
     private static final int MSG_NETWORK_CHANGE = 4;
 
@@ -93,9 +91,9 @@ public class ConfigActivity extends AppCompatActivity {
         mNetwork.register(connected -> {
             mHandler.sendEmptyMessage(MSG_NETWORK_CHANGE);
             if (connected) {
-                Log.d(TAG, "network connected, verify device");
+                KLog.d("network connected, verify device");
             } else {
-                Log.w(TAG, "network connected but permission not granted, ignore");
+                KLog.w("network connected but permission not granted, ignore");
             }
         });
     }
@@ -119,7 +117,7 @@ public class ConfigActivity extends AppCompatActivity {
         });
 
         btnGetInfo.setOnClickListener(v -> {
-            Log.d(TAG, mDeviceId + " " + Integer.parseInt(mDeviceId));
+            KLog.d(mDeviceId + " " + Integer.parseInt(mDeviceId));
             if (mDeviceId.isEmpty()) {
                 App.getInstance().showToast("Device ID can not be empty!");
             } else {
@@ -136,7 +134,7 @@ public class ConfigActivity extends AppCompatActivity {
                         } catch (IOException e) {
                             e.printStackTrace();
                         }
-                        Log.d(TAG, liftInfo.toString());
+                        KLog.d(liftInfo.toString());
 
                         String builder = "ID:" + liftInfo.getID() + "\n" + "别名:" + liftInfo.getNickName() + "\n" +
                                 "编码:" + liftInfo.getCode() + "\n" +
@@ -149,9 +147,9 @@ public class ConfigActivity extends AppCompatActivity {
                     @Override
                     @EverythingIsNonNull
                     public void onFailure(Call<ResponseBody> call, Throwable t) {
-                        Log.d(TAG, "onFailure");
-                        Log.d(TAG, Objects.requireNonNull(t.getMessage()));
-                        Log.d(TAG, Arrays.toString(t.getStackTrace()));
+                        KLog.d("onFailure");
+                        KLog.d(Objects.requireNonNull(t.getMessage()));
+                        KLog.d(Arrays.toString(t.getStackTrace()));
                     }
                 });
             }
@@ -185,7 +183,7 @@ public class ConfigActivity extends AppCompatActivity {
         if (isFinishing() || isDestroyed()) return true;
         switch (msg.what) {
             case MSG_LAUNCH:
-                Log.d(TAG, "launch SplashActivity");
+                KLog.d("launch SplashActivity");
                 synchronized (ConfigActivity.this) {
                     if (mConfigDone) break;
                     Intent intent = new Intent(this, SplashActivity.class);

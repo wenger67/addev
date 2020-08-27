@@ -159,13 +159,13 @@ public class WSService extends AbsWorkService {
 //        ZegoExpressEngine.destroyEngine(null);
         RecorderService.startObjectDetect(this);
         KLog.d("start SerialPortService");
-        startService(new Intent(this, SerialPortService.class));
+//        startService(new Intent(this, SerialPortService.class));
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         Log.d(TAG, "onStartCommand: [flags]" + flags + ", [startId]" + startId);
-        Log.d(TAG, intent.toString());
+        if (intent != null) Log.d(TAG, intent.toString());
         return super.onStartCommand(intent, flags, startId);
     }
 

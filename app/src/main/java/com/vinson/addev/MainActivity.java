@@ -72,7 +72,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-//        MainActivity.this.finish();
+        MainActivity.this.finish();
     }
 
     @Override

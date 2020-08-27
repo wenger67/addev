@@ -3,8 +3,10 @@ package com.vinson.addev.data;
 import com.vinson.addev.model.request.RunningData;
 import com.vinson.addev.utils.Constants;
 
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
+import okhttp3.MultipartBody;
 import okhttp3.OkHttpClient;
 import okhttp3.ResponseBody;
 import retrofit2.Call;
@@ -37,6 +39,10 @@ public class DataHelper {
 
     public Call<ResponseBody> getDevice(int deviceId) {
         return mDeviceService.findDevice(deviceId);
+    }
+
+    public Call<ResponseBody> uploadFiles(String storage, List<MultipartBody.Part> files) {
+        return mDeviceService.uploadFiles(storage, files);
     }
 
     public Call<ResponseBody> createRunningData(RunningData data) {

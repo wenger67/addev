@@ -144,20 +144,9 @@ public class WSService extends AbsWorkService {
         mNetworkAvailable = (networkInfo != null && networkInfo.isConnected());
         mConnectivityManager.registerNetworkCallback(new NetworkRequest.Builder().build(), mNetworkCallback);
         mGson = new Gson();
-        mHandler.post(new Runnable() {
-            @Override
-            public void run() {
-                new Timer().scheduleAtFixedRate(new TimerTask() {
-                    @Override
-                    public void run() {
-                        Log.d(TAG, "wsservice alive");
-                    }
-                }, 1000, 10000);
-            }
-        });
-
 //        ZegoExpressEngine.destroyEngine(null);
-        RecorderService.startObjectDetect(this);
+        ResultReceiver resultReceiver = new ResultReceiver(mHandler);
+        RecorderService.startToStartRecording(this, resultReceiver);
         KLog.d("start SerialPortService");
 //        startService(new Intent(this, SerialPortService.class));
     }

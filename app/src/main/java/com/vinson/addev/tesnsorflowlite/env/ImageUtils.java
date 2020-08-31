@@ -73,7 +73,7 @@ public class ImageUtils {
       LOGGER.i("Make dir failed");
     }
 
-    String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss_SSS").format(new Date());
+    String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmm").format(new Date());
     final String fname = timeStamp + "_" + filename;
     final File file = new File(myDir, fname);
     if (file.exists()) {

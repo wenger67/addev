@@ -7,6 +7,7 @@ import android.content.SharedPreferences;
 import android.util.Log;
 
 import com.socks.library.KLog;
+import com.vinson.addev.data.DataManager;
 import com.vinson.addev.services.RecorderService;
 import com.vinson.addev.services.WSService;
 import com.vinson.addev.tools.CrashHandler;
@@ -29,12 +30,13 @@ public class App extends Application {
         sp = getSharedPreferences(SP_NAME, Context.MODE_PRIVATE);
         // register crash handler
         CrashHandler.getInstance().init();
-
+        // NOSQL orm
+        ObjectBox.init(this);
+        DataManager.get().init();
+        // logcat
         KLog.init(true);
-
         // daemon service
         DaemonEnv.initialize(this, WSService.class, null);
-
 //        ENGINE = ZegoExpressEngine.createEngine(BuildConfig.ZegoAppId, BuildConfig.ZegoAppSign,
 //                true, ZegoScenario.GENERAL, this, null);
     }
@@ -46,6 +48,8 @@ public class App extends Application {
     public void startWSService() {
         this.startService(new Intent(this, WSService.class));
     }
+
+
 
     public static ZegoExpressEngine getEngine() {
         return ENGINE;

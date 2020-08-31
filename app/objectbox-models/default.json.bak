@@ -1,0 +1,153 @@
+{
+  "_note1": "KEEP THIS FILE! Check it into a version control system (VCS) like git.",
+  "_note2": "ObjectBox manages crucial IDs for your object model. See docs for details.",
+  "_note3": "If you have VCS merge conflicts, you must resolve them according to ObjectBox docs.",
+  "entities": [
+    {
+      "id": "1:2984485482935071121",
+      "lastPropertyId": "5:6400432630365547737",
+      "name": "LoopRecordFile",
+      "properties": [
+        {
+          "id": "1:3890847898618253636",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:6310486901308758628",
+          "name": "fileName",
+          "indexId": "1:7787679010703081593",
+          "type": 9,
+          "flags": 2080
+        },
+        {
+          "id": "3:3890835195567705348",
+          "name": "path",
+          "indexId": "2:8167701879142514995",
+          "type": 9,
+          "flags": 4096
+        },
+        {
+          "id": "4:9103819690728721394",
+          "name": "fileSize",
+          "type": 6,
+          "flags": 4
+        },
+        {
+          "id": "5:6400432630365547737",
+          "name": "createdAt",
+          "type": 6,
+          "flags": 4
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "2:3655478191363771326",
+      "lastPropertyId": "5:1941841111793503030",
+      "name": "FrameSavedImage",
+      "properties": [
+        {
+          "id": "1:4181307225338463746",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:9061576170001742718",
+          "name": "fileName",
+          "indexId": "3:719880310190265765",
+          "type": 9,
+          "flags": 2080
+        },
+        {
+          "id": "3:4372442536014137831",
+          "name": "path",
+          "indexId": "4:5054977972713270546",
+          "type": 9,
+          "flags": 4096
+        },
+        {
+          "id": "4:946244003771928544",
+          "name": "fileSize",
+          "type": 6,
+          "flags": 4
+        },
+        {
+          "id": "5:1941841111793503030",
+          "name": "createdAt",
+          "type": 6,
+          "flags": 4
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "3:628174458355129565",
+      "lastPropertyId": "8:8169800169612127976",
+      "name": "ObjectDetectResult",
+      "properties": [
+        {
+          "id": "1:58560440223410594",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:2050498620071496242",
+          "name": "createdAt",
+          "type": 6,
+          "flags": 4
+        },
+        {
+          "id": "3:5639537940153654825",
+          "name": "title",
+          "type": 9
+        },
+        {
+          "id": "4:6708673040011870535",
+          "name": "confidence",
+          "type": 7,
+          "flags": 4
+        },
+        {
+          "id": "5:5125149910458957287",
+          "name": "left",
+          "type": 7,
+          "flags": 4
+        },
+        {
+          "id": "6:8251564189087451671",
+          "name": "top",
+          "type": 7,
+          "flags": 4
+        },
+        {
+          "id": "7:3265228041045683225",
+          "name": "right",
+          "type": 7,
+          "flags": 4
+        },
+        {
+          "id": "8:8169800169612127976",
+          "name": "bottom",
+          "type": 7,
+          "flags": 4
+        }
+      ],
+      "relations": []
+    }
+  ],
+  "lastEntityId": "3:628174458355129565",
+  "lastIndexId": "4:5054977972713270546",
+  "lastRelationId": "0:0",
+  "lastSequenceId": "0:0",
+  "modelVersion": 5,
+  "modelVersionParserMinimum": 5,
+  "retiredEntityUids": [],
+  "retiredIndexUids": [],
+  "retiredPropertyUids": [],
+  "retiredRelationUids": [],
+  "version": 1
+}

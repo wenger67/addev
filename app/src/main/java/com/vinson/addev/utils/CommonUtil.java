@@ -11,6 +11,7 @@ import java.io.File;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.Locale;
 
 public class CommonUtil {
     public static final int MEDIA_TYPE_IMAGE = 1;
@@ -71,12 +72,14 @@ public class CommonUtil {
         }
 
         // Create a media file name
-        String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss_SSS").format(new Date());
+        String timeStamp;
         File mediaFile;
         if (type == MEDIA_TYPE_IMAGE) {
+            timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.CHINA).format(new Date());
             mediaFile = new File(mediaStorageDir.getPath() + File.separator +
                     "IMG_" + timeStamp + ".jpg");
         } else if (type == MEDIA_TYPE_VIDEO) {
+            timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.CHINA).format(new Date());
             mediaFile = new File(mediaStorageDir.getPath() + File.separator +
                     "VID_" + timeStamp + ".mp4");
             try {
@@ -91,4 +94,130 @@ public class CommonUtil {
         return mediaFile;
     }
 
+
+    public static String getPrintSize(long size) {
+        //如果字节数少于1024，则直接以B为单位，否则先除于1024，后3位因太少无意义
+        if (size < 1024) {
+            return String.valueOf(size) + "B";
+        } else {
+            size = size / 1024;
+        }
+        //如果原字节数除于1024之后，少于1024，则可以直接以KB作为单位
+        //因为还没有到达要使用另一个单位的时候
+        //接下去以此类推
+        if (size < 1024) {
+            return String.valueOf(size) + "KB";
+        } else {
+            size = size / 1024;
+        }
+        if (size < 1024) {
+            //因为如果以MB为单位的话，要保留最后1位小数，
+            //因此，把此数乘以100之后再取余
+            size = size * 100;
+            return String.valueOf((size / 100)) + "."
+                    + String.valueOf((size % 100)) + "MB";
+        } else {
+            //否则如果要以GB为单位的，先除于1024再作同样的处理
+            size = size * 100 / 1024;
+            return String.valueOf((size / 100)) + "."
+                    + String.valueOf((size % 100)) + "GB";
+        }
+    }
+
+    public static byte[] NV21_rotate_to_270(byte[] nv21_data, int width, int height)
+    {
+        int y_size = width * height;
+        int buffser_size = y_size * 3 / 2;
+        byte[] nv21_rotated = new byte[buffser_size];
+        int i = 0;
+
+        // Rotate the Y luma
+        for (int x = width - 1; x >= 0; x--)
+        {
+            int offset = 0;
+            for (int y = 0; y < height; y++)
+            {
+                nv21_rotated[i] = nv21_data[offset + x];
+                i++;
+                offset += width;
+            }
+        }
+
+        // Rotate the U and V color components
+        i = y_size;
+        for (int x = width - 1; x > 0; x = x - 2)
+        {
+            int offset = y_size;
+            for (int y = 0; y < height / 2; y++)
+            {
+                nv21_rotated[i] = nv21_data[offset + (x - 1)];
+                i++;
+                nv21_rotated[i] = nv21_data[offset + x];
+                i++;
+                offset += width;
+            }
+        }
+        return nv21_rotated;
+    }
+
+    public static byte[] NV21_rotate_to_180(byte[] nv21_data, int width, int height)
+    {
+        int y_size = width * height;
+        int buffser_size = y_size * 3 / 2;
+        byte[] nv21_rotated = new byte[buffser_size];
+        int i = 0;
+        int count = 0;
+
+
+        for (i = y_size - 1; i >= 0; i--)
+        {
+            nv21_rotated[count] = nv21_data[i];
+            count++;
+        }
+
+
+        for (i = buffser_size - 1; i >= y_size; i -= 2)
+        {
+            nv21_rotated[count++] = nv21_data[i - 1];
+            nv21_rotated[count++] = nv21_data[i];
+        }
+        return nv21_rotated;
+    }
+
+    public static byte[] NV21_rotate_to_90(byte[] nv21_data, int width, int height) {
+        int y_size = width * height;
+        int buffser_size = y_size * 3 / 2;
+        byte[] nv21_rotated = new byte[buffser_size];
+        // Rotate the Y luma
+
+
+        int i = 0;
+        int startPos = (height - 1) * width;
+        for (int x = 0; x < width; x++)
+        {
+            int offset = startPos;
+            for (int y = height - 1; y >= 0; y--)
+            {
+                nv21_rotated[i] = nv21_data[offset + x];
+                i++;
+                offset -= width;
+            }
+        }
+
+        // Rotate the U and V color components
+        i = buffser_size - 1;
+        for (int x = width - 1; x > 0; x = x - 2)
+        {
+            int offset = y_size;
+            for (int y = 0; y < height / 2; y++)
+            {
+                nv21_rotated[i] = nv21_data[offset + x];
+                i--;
+                nv21_rotated[i] = nv21_data[offset + (x - 1)];
+                i--;
+                offset += width;
+            }
+        }
+        return nv21_rotated;
+    }
 }

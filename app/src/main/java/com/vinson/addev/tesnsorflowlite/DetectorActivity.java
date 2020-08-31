@@ -173,7 +173,6 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
     if (SAVE_PREVIEW_BITMAP) {
       ImageUtils.saveBitmap(croppedBitmap);
     }
-
     runInBackground(
         new Runnable() {
           @Override
@@ -242,7 +241,7 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
 
   // Which detection model to use: by default uses Tensorflow Object Detection API frozen
   // checkpoints.
-  private enum DetectorMode {
+  public enum DetectorMode {
     TF_OD_API;
   }
 

@@ -1,5 +1,6 @@
 apply plugin: 'com.android.application'
 apply plugin: 'de.undercouch.download'
+apply plugin: 'io.objectbox' //last one
 
 static def gitVersion() {
     def cmd = 'git rev-list HEAD --first-parent --count'
@@ -140,10 +141,12 @@ dependencies {
     implementation 'com.xdandroid:hellodaemon:1.2.2' // daemon service
 
     implementation 'com.github.javafaker:javafaker:1.0.2' // fake data
-
     implementation('org.tensorflow:tensorflow-lite:2.3.0') { changing = true }
-
     implementation 'com.otaliastudios:cameraview:2.6.3' // camera library
+    implementation 'com.blankj:utilcodex:1.29.0'
+
+    annotationProcessor "io.objectbox:objectbox-processor:2.7.1"
+    implementation "io.objectbox:objectbox-android:2.7.1"
 
     testImplementation 'junit:junit:4.12'
     androidTestImplementation 'androidx.test.ext:junit:1.1.2'

@@ -5,15 +5,15 @@
     xmlns:app="http://schemas.android.com/apk/res-auto">
     <com.otaliastudios.cameraview.CameraView
         android:id="@+id/camera_view"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_width="108dp"
+        android:layout_height="192dp"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintRight_toRightOf="parent"
         app:layout_constraintBottom_toBottomOf="parent"
         android:keepScreenOn="true"
-        app:cameraExperimental="true"
-        app:cameraEngine="camera2"
+        app:cameraExperimental="false"
+        app:cameraEngine="camera1"
         app:cameraPreview="glSurface"
         app:cameraPlaySounds="false"
         app:cameraGrid="off"
@@ -28,8 +28,8 @@
         app:cameraMode="video">
 
         <ImageView
-            android:layout_width="72dp"
-            android:layout_height="72dp"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
             android:layout_gravity="bottom|end"
             android:src="@mipmap/ic_launcher_round"
             app:layout_drawOnPictureSnapshot="true"

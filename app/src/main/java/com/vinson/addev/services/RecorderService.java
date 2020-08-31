@@ -4,26 +4,27 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
 import android.graphics.ImageFormat;
+import android.graphics.Matrix;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
+import android.graphics.RectF;
 import android.graphics.YuvImage;
-import android.hardware.Camera;
-import android.media.MediaRecorder;
 import android.os.Build;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.ResultReceiver;
-import android.util.Log;
-import android.util.Size;
+import android.os.SystemClock;
 import android.view.LayoutInflater;
+import android.view.Surface;
 import android.view.View;
 import android.view.WindowManager;
 
 import androidx.annotation.NonNull;
 
+import com.blankj.utilcode.util.SDCardUtils;
 import com.otaliastudios.cameraview.CameraException;
 import com.otaliastudios.cameraview.CameraListener;
 import com.otaliastudios.cameraview.CameraLogger;
@@ -32,7 +33,6 @@ import com.otaliastudios.cameraview.CameraUtils;
 import com.otaliastudios.cameraview.CameraView;
 import com.otaliastudios.cameraview.PictureResult;
 import com.otaliastudios.cameraview.VideoResult;
-import com.otaliastudios.cameraview.controls.Engine;
 import com.otaliastudios.cameraview.controls.Mode;
 import com.otaliastudios.cameraview.controls.Preview;
 import com.otaliastudios.cameraview.frame.Frame;
@@ -44,9 +44,18 @@ import com.socks.library.KLog;
 import com.vinson.addev.App;
 import com.vinson.addev.R;
 import com.vinson.addev.data.DataHelper;
+import com.vinson.addev.data.DataManager;
+import com.vinson.addev.model.local.FrameSavedImage;
+import com.vinson.addev.model.local.FrameSavedImage_;
+import com.vinson.addev.model.local.LoopVideoFile;
+import com.vinson.addev.model.local.LoopVideoFile_;
+import com.vinson.addev.model.local.ObjectDetectResult;
+import com.vinson.addev.model.local.ObjectDetectResult_;
+import com.vinson.addev.tesnsorflowlite.env.ImageUtils;
+import com.vinson.addev.tesnsorflowlite.tflite.Classifier;
+import com.vinson.addev.tesnsorflowlite.tflite.TFLiteObjectDetectionAPIModel;
 import com.vinson.addev.utils.CommonUtil;
 
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -55,13 +64,10 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
-import java.util.Queue;
-import java.util.Timer;
-import java.util.TimerTask;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import io.objectbox.query.QueryBuilder;
 import okhttp3.MediaType;
 import okhttp3.MultipartBody;
 import okhttp3.RequestBody;
@@ -70,77 +76,59 @@ import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
 
+import static com.vinson.addev.utils.CommonUtil.MEDIA_TYPE_IMAGE;
 import static com.vinson.addev.utils.CommonUtil.MEDIA_TYPE_VIDEO;
+import static com.vinson.addev.utils.TfLiteUtil.MINIMUM_CONFIDENCE_TF_OD_API;
+import static com.vinson.addev.utils.TfLiteUtil.TF_OD_API_INPUT_SIZE;
+import static com.vinson.addev.utils.TfLiteUtil.TF_OD_API_IS_QUANTIZED;
+import static com.vinson.addev.utils.TfLiteUtil.TF_OD_API_LABELS_FILE;
+import static com.vinson.addev.utils.TfLiteUtil.TF_OD_API_MODEL_FILE;
 
 public class RecorderService extends Service {
     public static final String RESULT_RECEIVER = "resultReceiver";
-    public static final String VIDEO_PATH = "recordedVideoPath";
-    public static final int RECORD_RESULT_OK = 0;
-    public static final int RECORD_RESULT_DEVICE_NO_CAMERA = 1;
-    public static final int RECORD_RESULT_GET_CAMERA_FAILED = 2;
     public static final int RECORD_RESULT_ALREADY_RECORDING = 3;
-    public static final int RECORD_RESULT_NOT_RECORDING = 4;
-    public static final int RECORD_RESULT_UNSTOPPABLE = 5;
     public static final int COMMAND_START_OBJECT_DETECT = 10;
-    private static final String TAG = RecorderService.class.getSimpleName();
     private static final String START_SERVICE_COMMAND = "startServiceCommands";
     private static final int COMMAND_NONE = -1;
     private static final int COMMAND_START_RECORDING = 0;
     private static final int COMMAND_STOP_RECORDING = 1;
-    private static final int MSG_PROCESS_PREVIEW_CALLBACK = 101;
+    private static final int MSG_SAVE_FRAME_IMAGE = 101;
+    private static final int MSG_DELETE_OLDEST_VIDEO = 11;
     private static final int MSG_READY_TO_UPLOAD = 10;
 
-    private final static boolean USE_FRAME_PROCESSOR = true;
-    private final static boolean DECODE_BITMAP = true;
-
-    private static final String SELECTED_CAMERA_FOR_RECORDING = "cameraForRecording";
-    private static final boolean SAVE_IMAGE = false;
-    private static final boolean RECORD_VIDEO = false;
-    private static final int MINIMUM_PREVIEW_SIZE = 320;
-    private static final Size DESIRED_PREVIEW_SIZE = new Size(640, 480);
+    private static final int VIDEO_SNAPSHOT_DURATION = 60 * 1000;
+    private static final long STORAGE_SIZE_RESERVE = 2 * 1024 * 1024;
     private static final boolean MAINTAIN_ASPECT = false;
-    private static boolean SAVE_PREVIEW_BITMAP = false;
+    private static boolean USE_FRAME_PROCESSOR = true;
+    private static boolean DECODE_BITMAP = true;
+    // save cropped bitmap that send into tensorflow
+    private static final boolean SAVE_CROPPED_BITMAP = false;
     CameraView mCameraView;
     CameraOptions mCameraOptions;
-    private MediaRecorder mMediaRecorder;
+    com.otaliastudios.cameraview.size.Size previewSize = null;
+    Classifier detector;
     private ExecutorService mThreadPool;
-    private boolean mRecording = false;
-    private String mRecordingPath = null;
+    private boolean mLoopRecording = false;
     private Handler mHandler;
     private HandlerThread mHandlerThread;
-    private Queue<byte[]> imageList = new ConcurrentLinkedQueue<>();
-    /**
-     * Used to take picture.
-     */
-    private Camera.PictureCallback mPicture = new Camera.PictureCallback() {
-        @Override
-        public void onPictureTaken(byte[] data, Camera camera) {
-            File pictureFile = CommonUtil.getOutputMediaFile(CommonUtil.MEDIA_TYPE_IMAGE);
-
-            if (pictureFile == null) {
-                return;
-            }
-
-            try {
-                FileOutputStream fos = new FileOutputStream(pictureFile);
-                fos.write(data);
-                fos.close();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-    };
-    private List<File> filesToUpload = new ArrayList<>(4);  // bitmaps wait for upload
+    private int[] rgbBytes = null;
+    private Runnable postInferenceCallback;
+    private Runnable imageConverter;
+    private Runnable saveImage;
     private Handler.Callback callback = (msg -> {
         switch (msg.what) {
-            case MSG_PROCESS_PREVIEW_CALLBACK:
-                imageList.add((byte[]) msg.obj);
-                if (mThreadPool != null && !mThreadPool.isShutdown())
-
-                    break;
+            case MSG_SAVE_FRAME_IMAGE:
+                if (mThreadPool != null && !mThreadPool.isShutdown()) {
+                    mThreadPool.execute(this.saveImage);
+                }
+                break;
             case MSG_READY_TO_UPLOAD:
                 if (mThreadPool != null && !mThreadPool.isShutdown())
                     mThreadPool.execute(this::uploadBitmaps);
+                break;
+            case MSG_DELETE_OLDEST_VIDEO:
+                if (mThreadPool != null && !mThreadPool.isShutdown())
+                    mThreadPool.execute(this::deleteOldest);
                 break;
             default:
                 KLog.w("unknown message " + msg.what);
@@ -148,6 +136,13 @@ public class RecorderService extends Service {
         }
         return false;
     });
+    private long lastProcessingTimeMs;
+    private boolean computingDetection = false;
+    private Bitmap rgbFrameBitmap = null;
+    private Bitmap croppedBitmap = null;
+    private boolean isProcessingFrame = false;
+    private Matrix frameToCropTransform;
+    private Matrix cropToFrameTransform;
 
     public RecorderService() {
     }
@@ -173,21 +168,52 @@ public class RecorderService extends Service {
     }
 
     private void uploadBitmaps() {
+        KLog.d();
+
+        List<FrameSavedImage> images = new ArrayList<>();  // images wait for upload
+        List<ObjectDetectResult> results = new ArrayList<>(); // detect results wait for upload
+        List<LoopVideoFile> videos = new ArrayList<>(); // videos wait for upload
+
+        images = DataManager.get().savedImageBox.query().orderDesc(FrameSavedImage_.createdAt)
+                .build().find(0, 4);
+        videos = DataManager.get().recordFileBox.query().orderDesc(LoopVideoFile_.createdAt)
+                .build().find(0 , 1);
+        results = DataManager.get().objectBox.query().orderDesc(ObjectDetectResult_.createdAt)
+                .build().find(0, personCount + motorCount);
+
+
         List<MultipartBody.Part> files = new ArrayList<>();
-        for (File file : filesToUpload) {
-            RequestBody requestFile = RequestBody.create(MediaType.parse("multipart/form-data"),
-                    file);
-            MultipartBody.Part part = MultipartBody.Part.createFormData("files", "fileName.png",
+        for (FrameSavedImage file : images) {
+            RequestBody requestFile = RequestBody.create(MediaType.parse("image/jpeg"),
+                    new File(file.path));
+            MultipartBody.Part part = MultipartBody.Part.createFormData("files", file.fileName,
                     requestFile);
             files.add(part);
         }
+
+//        for (LoopVideoFile file : videos) {
+//            RequestBody requestFile = RequestBody.create(MediaType.parse("multipart/form-data"),
+//                    new File(file.path));
+//            MultipartBody.Part part = MultipartBody.Part.createFormData("files", file.fileName,
+//                    requestFile);
+//            files.add(part);
+//        }
+
+        KLog.d(images);
+        KLog.d(videos);
+        KLog.d(results);
 
         KLog.d("######start");
         DataHelper.getInstance().uploadFiles("local", files).enqueue(new Callback<ResponseBody>() {
             @Override
             public void onResponse(Call<ResponseBody> call, Response<ResponseBody> response) {
+                // data prepared, clear flags
+                savingImage = false;
+                savedImageCount = 0;
+                computingDetection = false;
+
+                // delete record
                 KLog.d("######success");
-                clearFiles();
                 try {
                     assert response.body() != null;
                     KLog.d(response.body().string());
@@ -198,17 +224,17 @@ public class RecorderService extends Service {
 
             @Override
             public void onFailure(Call<ResponseBody> call, Throwable t) {
-                clearFiles();
+                // data prepared, clear flags
+                savingImage = false;
+                savedImageCount = 0;
+                computingDetection = false;
+
                 KLog.d(t.getMessage());
+                for (StackTraceElement stackTraceElement: t.getStackTrace()) {
+                    KLog.d(stackTraceElement.toString());
+                }
             }
         });
-    }
-
-    private void clearFiles() {
-        for (File file : filesToUpload) {
-            if (file.exists()) file.delete();
-        }
-        filesToUpload.clear();
     }
 
     @Override
@@ -220,20 +246,20 @@ public class RecorderService extends Service {
         mHandlerThread.start();
         mHandler = new Handler(mHandlerThread.getLooper(), callback);
 
-        CameraLogger.setLogLevel(CameraLogger.LEVEL_VERBOSE);
+        CameraLogger.setLogLevel(CameraLogger.LEVEL_ERROR);
         enableBackgroundCameraByOverlay();
-        setupParams();
         mCameraView.setLifecycleOwner(null);
-        mCameraView.setEngine(Engine.CAMERA1);
+        setupParams();
         mCameraView.addCameraListener(new Listener());
         mCameraView.open();
-        processFrame();
     }
 
-    private void setupParams() {
+    private boolean savingImage = false;
+    private int savedImageCount = 0;
 
-        SizeSelector width = SizeSelectors.minWidth(1000);
-        SizeSelector height = SizeSelectors.minHeight(1500);
+    private void setupParams() {
+        SizeSelector width = SizeSelectors.maxWidth(720);
+        SizeSelector height = SizeSelectors.maxHeight(1280);
         SizeSelector dimensions = SizeSelectors.and(width, height);
         SizeSelector ratio = SizeSelectors.aspectRatio(AspectRatio.of(9, 16), 0);
         SizeSelector constrains = SizeSelectors.or(
@@ -244,38 +270,67 @@ public class RecorderService extends Service {
         mCameraView.setPreviewStreamSize(constrains);
         mCameraView.setVideoSize(constrains);
         mCameraView.setPictureSize(constrains);
+        previewSize = new com.otaliastudios.cameraview.size.Size(720, 1280);
     }
 
-    private void  processFrame() {
+    private void processFrame() {
         if (USE_FRAME_PROCESSOR) {
             mCameraView.addFrameProcessor(new FrameProcessor() {
-                private long lastTime = System.currentTimeMillis();
-
                 @Override
                 public void process(@NonNull Frame frame) {
-                    long newTime = frame.getTime();
-                    long delay = newTime - lastTime;
-                    lastTime = newTime;
-//                    KLog.v("Frame delayMillis:" + delay +  " FPS:" + 1000 / delay);
+                    if (isProcessingFrame) {
+                        KLog.d("drop frame");
+                        return;
+                    }
                     if (DECODE_BITMAP) {
                         if (frame.getFormat() == ImageFormat.NV21
                                 && frame.getDataClass() == byte[].class) {
-                            byte[] data = frame.getData();
+                            byte[] data = CommonUtil.NV21_rotate_to_270(frame.getData(),
+                                    previewSize.getHeight(), previewSize.getWidth());
+                            isProcessingFrame = true;
+                            imageConverter = () -> ImageUtils.convertYUV420SPToARGB8888(data,
+                                    previewSize.getWidth(), previewSize.getHeight(), rgbBytes);
+                            postInferenceCallback = () -> isProcessingFrame = false;
+
                             YuvImage yuvImage = new YuvImage(data,
                                     frame.getFormat(),
-                                    frame.getSize().getWidth(),
-                                    frame.getSize().getHeight(),
+                                    previewSize
+                                            .getWidth(),
+                                    previewSize.getHeight(),
                                     null);
-                            KLog.d(frame.getSize().toString());
-                            ByteArrayOutputStream jpegStream = new ByteArrayOutputStream();
-                            yuvImage.compressToJpeg(new Rect(0, 0,
-                                    frame.getSize().getWidth(),
-                                    frame.getSize().getHeight()), 100, jpegStream);
-                            byte[] jpegByteArray = jpegStream.toByteArray();
-                            Bitmap bitmap = BitmapFactory.decodeByteArray(jpegByteArray,
-                                    0, jpegByteArray.length);
-                            //noinspection ResultOfMethodCallIgnored
-                            bitmap.toString();
+
+                            saveImage = () -> {
+                                try {
+                                    if (savedImageCount < 4) {
+                                        savedImageCount ++;
+                                        File image = CommonUtil.getOutputMediaFile(MEDIA_TYPE_IMAGE);
+                                        final FileOutputStream out = new FileOutputStream(image);
+                                        yuvImage.compressToJpeg(new Rect(0, 0,
+                                                previewSize.getWidth(),
+                                                previewSize.getHeight()), 30, out);
+                                        out.flush();
+                                        out.close();
+                                        // save image into database
+                                        if (image != null) {
+                                            FrameSavedImage savedImage = new FrameSavedImage(image.getName(),
+                                                    image.getAbsolutePath(), image.length());
+                                            DataManager.get().savedImageBox.put(savedImage);
+                                        }
+                                        // continue save image
+                                        mHandler.sendEmptyMessage(MSG_SAVE_FRAME_IMAGE);
+                                    } else {
+                                        // stop save image
+                                        // ready to upload
+                                        mHandler.sendEmptyMessage(MSG_READY_TO_UPLOAD);
+                                    }
+
+                                } catch (final Exception e) {
+                                    e.printStackTrace();
+                                    KLog.e("Exception!" + e.getMessage());
+                                }
+                            };
+
+                            processImage();
                         }
                     }
                 }
@@ -283,62 +338,86 @@ public class RecorderService extends Service {
         }
     }
 
-
-    private class Listener extends CameraListener {
-        public Listener() {
-            super();
+    private void processImage() {
+        // No mutex needed as this method is not reentrant.
+        if (computingDetection) {
+            readyForNextImage();
+            return;
         }
+        computingDetection = true;
+        rgbFrameBitmap.setPixels(getRgbBytes(), 0, previewSize.getWidth(), 0, 0,
+                previewSize.getWidth(), previewSize.getHeight());
+        readyForNextImage();
 
-        @Override
-        public void onCameraOpened(@NonNull CameraOptions options) {
-            super.onCameraOpened(options);
-            KLog.d(Arrays.toString(new Collection[]{options.getSupportedFrameProcessingFormats()}));
-            mCameraOptions = options;
-            Collection<com.otaliastudios.cameraview.size.Size> videoSizes = options.getSupportedVideoSizes();
-            Collection<com.otaliastudios.cameraview.size.AspectRatio> videoAspect = options.getSupportedVideoAspectRatios();
-            KLog.d(Arrays.toString(new Collection[]{videoSizes}));
-            KLog.d(Arrays.toString(new Collection[]{videoAspect}));
-        }
+        final Canvas canvas = new Canvas(croppedBitmap);
+        canvas.drawBitmap(rgbFrameBitmap, frameToCropTransform, null);
+        if (SAVE_CROPPED_BITMAP)
+            ImageUtils.saveBitmap(croppedBitmap);
 
-        @Override
-        public void onCameraClosed() {
-            super.onCameraClosed();
-            KLog.d();
-        }
+        runInBackground(() -> {
+            final long startTime = SystemClock.uptimeMillis();
+            final List<Classifier.Recognition> results = detector.recognizeImage(croppedBitmap);
+            lastProcessingTimeMs = SystemClock.uptimeMillis() - startTime;
 
-        @Override
-        public void onCameraError(@NonNull CameraException exception) {
-            super.onCameraError(exception);
-            KLog.e(exception.getMessage());
-        }
+            List<ObjectDetectResult> persons = new ArrayList<>();
+            List<ObjectDetectResult> motors = new ArrayList<>();
 
-        @Override
-        public void onPictureTaken(@NonNull PictureResult result) {
-            super.onPictureTaken(result);
-        }
+            // 检测到结果之后，上传三张照片和一个视频
+            for (final Classifier.Recognition result : results) {
+                final RectF location = result.getLocation();
+                if (location != null && result.getConfidence() >= MINIMUM_CONFIDENCE_TF_OD_API) {
+                    cropToFrameTransform.mapRect(location);
+                    result.setLocation(location);
+                    String title = result.getTitle();
+                    if (title.equals("person")) {
+                        persons.add(new ObjectDetectResult(title, result.getConfidence(), location.left, location.top, location.right, location.bottom));
+                    } else if (title.equals("bicycle") || title.equals("motorcycle")) {
+                        motors.add(new ObjectDetectResult(title, result.getConfidence(), location.left, location.top, location.right, location.bottom));
+                    }
+                    KLog.d(result.toString());
+                }
+            }
 
-        @Override
-        public void onVideoTaken(@NonNull VideoResult result) {
-            super.onVideoTaken(result);
-            KLog.d(result.getFile().getAbsolutePath() + Objects.requireNonNull(result).getSize());
-            mRecording = false;
-        }
+            if (savingImage) return;
 
-        @Override
-        public void onOrientationChanged(int orientation) {
-            super.onOrientationChanged(orientation);
-        }
+            if (persons.size() > 0 || motors.size() > 0) {
+                // save images
+                savingImage = true;
+                mHandler.sendEmptyMessage(MSG_SAVE_FRAME_IMAGE);
+            }
 
-        @Override
-        public void onVideoRecordingStart() {
-            super.onVideoRecordingStart();
-            KLog.d();
-        }
+            if (persons.size() > 0 && motors.size() > 0) {
+                // 检测到人物和摩托车
+                personCount = persons.size();
+                motorCount = motors.size();
+                DataManager.get().objectBox.put(persons);
+                DataManager.get().objectBox.put(motors);
+            } else if (persons.size() > 0) {
+                // 检测到人物
+                personCount = persons.size();
+                motorCount = 0;
+                DataManager.get().objectBox.put(persons);
 
-        @Override
-        public void onVideoRecordingEnd() {
-            super.onVideoRecordingEnd();
-            KLog.d();
+            } else if (motors.size() > 0) {
+                // 检测到摩托车
+                motorCount = motors.size();
+                personCount = 0;
+                DataManager.get().objectBox.put(motors);
+            }
+        });
+    }
+
+    public int personCount;
+    public int motorCount;
+
+    protected int[] getRgbBytes() {
+        imageConverter.run();
+        return rgbBytes;
+    }
+
+    protected void readyForNextImage() {
+        if (postInferenceCallback != null) {
+            postInferenceCallback.run();
         }
     }
 
@@ -346,7 +425,9 @@ public class RecorderService extends Service {
         WindowManager wm = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
         WindowManager.LayoutParams params = new WindowManager.LayoutParams(1, 1,
                 WindowManager.LayoutParams.TYPE_SYSTEM_OVERLAY,
-                WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
+                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON |
+                        WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE |
+                        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
                 PixelFormat.TRANSLUCENT);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             params.type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
@@ -406,14 +487,13 @@ public class RecorderService extends Service {
 
         final ResultReceiver resultReceiver = intent.getParcelableExtra(RESULT_RECEIVER);
 
-        if (mRecording) {
+        if (mLoopRecording) {
             // Already recording
             resultReceiver.send(RECORD_RESULT_ALREADY_RECORDING, null);
             return;
         }
-//        captureVideo();
         captureVideoSnapshot();
-        mRecording = true;
+        mLoopRecording = true;
     }
 
     private void captureVideo() {
@@ -437,11 +517,14 @@ public class RecorderService extends Service {
             KLog.w("Video snapshots are only allowed with the GL_SURFACE preview.");
             return;
         }
-        mCameraView.takeVideoSnapshot(Objects.requireNonNull(CommonUtil.getOutputMediaFile(MEDIA_TYPE_VIDEO)), 60000);
+        mCameraView.takeVideoSnapshot(Objects.requireNonNull(CommonUtil.getOutputMediaFile(MEDIA_TYPE_VIDEO)), VIDEO_SNAPSHOT_DURATION);
     }
 
     private void handleObjectDetectCommand() {
         KLog.d();
+        USE_FRAME_PROCESSOR = true;
+        DECODE_BITMAP = true;
+        processFrame();
     }
 
     protected synchronized void runInBackground(final Runnable r) {
@@ -452,13 +535,164 @@ public class RecorderService extends Service {
 
     private void handleStopRecordingCommand(Intent intent) {
         ResultReceiver resultReceiver = intent.getParcelableExtra(RESULT_RECEIVER);
-
-        Log.d(TAG, "recording is finished.");
     }
 
     @Override
     public IBinder onBind(Intent intent) {
         // TODO: Return the communication channel to the service.
         throw new UnsupportedOperationException("Not yet implemented");
+    }
+
+    private void initTensorFlow() {
+        int cropSize = TF_OD_API_INPUT_SIZE;
+        try {
+            detector =
+                    TFLiteObjectDetectionAPIModel.create(
+                            getAssets(),
+                            TF_OD_API_MODEL_FILE,
+                            TF_OD_API_LABELS_FILE,
+                            TF_OD_API_INPUT_SIZE,
+                            TF_OD_API_IS_QUANTIZED);
+            cropSize = TF_OD_API_INPUT_SIZE;
+        } catch (final IOException e) {
+            e.printStackTrace();
+            KLog.e("Exception initializing classifier!");
+        }
+
+        rgbBytes = new int[previewSize.getWidth() * previewSize.getHeight()];
+        rgbFrameBitmap = Bitmap.createBitmap(previewSize.getWidth(), previewSize.getHeight(),
+                Bitmap.Config.ARGB_8888);
+        croppedBitmap = Bitmap.createBitmap(cropSize, cropSize, Bitmap.Config.ARGB_8888);
+        int sensorOrientation = 90 - getScreenOrientation();
+        KLog.i("Camera orientation relative to screen canvas: %d", sensorOrientation);
+        KLog.i("Initializing at size %dx%d", previewSize.getWidth(), previewSize.getHeight());
+        frameToCropTransform =
+                ImageUtils.getTransformationMatrix(
+                        previewSize.getWidth(), previewSize.getHeight(),
+                        cropSize, cropSize,
+                        0, MAINTAIN_ASPECT);
+
+        cropToFrameTransform = new Matrix();
+        frameToCropTransform.invert(cropToFrameTransform);
+    }
+
+    protected int getScreenOrientation() {
+        WindowManager wm = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
+        switch (wm.getDefaultDisplay().getRotation()) {
+            case Surface.ROTATION_270:
+                return 270;
+            case Surface.ROTATION_180:
+                return 180;
+            case Surface.ROTATION_90:
+                return 90;
+            case Surface.ROTATION_0:
+            default:
+                return 0;
+        }
+    }
+
+
+    private void deleteOldest() {
+        QueryBuilder<LoopVideoFile> queryBuilder = DataManager.get().recordFileBox.query();
+        queryBuilder.order(LoopVideoFile_.createdAt);
+        LoopVideoFile file = queryBuilder.build().findFirst();
+        if (file != null) {
+            KLog.d(file.toString());
+            boolean flag = DataManager.get().recordFileBox.remove(file);
+            if (flag) KLog.d("delete " + file.path + " from database success");
+            // delete from disk
+            File file1 = new File(file.path);
+            if (file1.exists()) {
+                boolean ret = file1.delete();
+                if (ret) {
+                    KLog.d("delete " + file.path + " from disk success");
+                    long available = SDCardUtils.getExternalAvailableSize();
+                    if (available / 1024 < STORAGE_SIZE_RESERVE) {
+                        // remove oldest video item
+                        mHandler.sendEmptyMessage(MSG_DELETE_OLDEST_VIDEO);
+                    }
+                } else KLog.d("delete " + file.path + " from disk failed");
+            } else {
+                KLog.d("file " + file.path + " not exist");
+                mHandler.sendEmptyMessage(MSG_DELETE_OLDEST_VIDEO);
+            }
+        }
+    }
+
+    private class Listener extends CameraListener {
+        public Listener() {
+            super();
+        }
+
+        @Override
+        public void onCameraOpened(@NonNull CameraOptions options) {
+            super.onCameraOpened(options);
+            KLog.d(Arrays.toString(new Collection[]{options.getSupportedFrameProcessingFormats()}));
+            mCameraOptions = options;
+            Collection<com.otaliastudios.cameraview.size.Size> videoSizes =
+                    options.getSupportedVideoSizes();
+            Collection<com.otaliastudios.cameraview.size.AspectRatio> videoAspect =
+                    options.getSupportedVideoAspectRatios();
+            KLog.d(Arrays.toString(new Collection[]{videoSizes}));
+            KLog.d(Arrays.toString(new Collection[]{videoAspect}));
+
+            initTensorFlow();
+            handleObjectDetectCommand();
+        }
+
+        @Override
+        public void onCameraClosed() {
+            super.onCameraClosed();
+            KLog.d();
+        }
+
+        @Override
+        public void onCameraError(@NonNull CameraException exception) {
+            super.onCameraError(exception);
+            KLog.e(exception.getMessage());
+        }
+
+        @Override
+        public void onPictureTaken(@NonNull PictureResult result) {
+            super.onPictureTaken(result);
+        }
+
+        @Override
+        public void onVideoTaken(@NonNull VideoResult result) {
+            super.onVideoTaken(result);
+            LoopVideoFile file = new LoopVideoFile(result.getFile().getName(),
+                    result.getFile().getAbsolutePath(), result.getFile().length());
+            KLog.d(file.toString());
+            // save info database
+            DataManager.get().recordFileBox.put(file);
+            if (mLoopRecording) {
+                long available = SDCardUtils.getExternalAvailableSize();
+                if (available / 1024 < STORAGE_SIZE_RESERVE) {
+                    // remove oldest video item
+                    mHandler.sendEmptyMessage(MSG_DELETE_OLDEST_VIDEO);
+                }
+                // continue snap shot recording
+                mHandler.postDelayed(RecorderService.this::captureVideoSnapshot, 10);
+            }
+
+        }
+
+        @Override
+        public void onOrientationChanged(int orientation) {
+            super.onOrientationChanged(orientation);
+            KLog.d(orientation);
+        }
+
+        @Override
+        public void onVideoRecordingStart() {
+            super.onVideoRecordingStart();
+            KLog.d();
+        }
+
+        @Override
+        public void onVideoRecordingEnd() {
+            super.onVideoRecordingEnd();
+            KLog.d();
+        }
     }
 }

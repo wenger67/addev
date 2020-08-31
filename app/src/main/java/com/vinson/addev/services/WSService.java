@@ -147,6 +147,7 @@ public class WSService extends AbsWorkService {
 //        ZegoExpressEngine.destroyEngine(null);
         ResultReceiver resultReceiver = new ResultReceiver(mHandler);
         RecorderService.startToStartRecording(this, resultReceiver);
+//        RecorderService.startObjectDetect(this);
         KLog.d("start SerialPortService");
 //        startService(new Intent(this, SerialPortService.class));
     }

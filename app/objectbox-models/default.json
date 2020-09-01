@@ -137,11 +137,41 @@
         }
       ],
       "relations": []
+    },
+    {
+      "id": "5:3893994755689155057",
+      "lastPropertyId": "1:2004478353783188872",
+      "name": "UploadRetry",
+      "properties": [
+        {
+          "id": "1:2004478353783188872",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        }
+      ],
+      "relations": [
+        {
+          "id": "1:7399732890263103025",
+          "name": "images",
+          "targetId": "2:3655478191363771326"
+        },
+        {
+          "id": "2:7833430230299315130",
+          "name": "videos",
+          "targetId": "4:8847677577163105587"
+        },
+        {
+          "id": "3:2277931465581041680",
+          "name": "results",
+          "targetId": "3:628174458355129565"
+        }
+      ]
     }
   ],
-  "lastEntityId": "4:8847677577163105587",
+  "lastEntityId": "5:3893994755689155057",
   "lastIndexId": "6:1308178577664250605",
-  "lastRelationId": "0:0",
+  "lastRelationId": "3:2277931465581041680",
   "lastSequenceId": "0:0",
   "modelVersion": 5,
   "modelVersionParserMinimum": 5,

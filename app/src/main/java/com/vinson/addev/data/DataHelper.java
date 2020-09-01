@@ -1,5 +1,7 @@
 package com.vinson.addev.data;
 
+import com.vinson.addev.model.annotation.DeviceEventId;
+import com.vinson.addev.model.request.DeviceEventInfo;
 import com.vinson.addev.model.request.RunningData;
 import com.vinson.addev.utils.Constants;
 
@@ -8,6 +10,7 @@ import java.util.concurrent.TimeUnit;
 
 import okhttp3.MultipartBody;
 import okhttp3.OkHttpClient;
+import okhttp3.RequestBody;
 import okhttp3.ResponseBody;
 import retrofit2.Call;
 import retrofit2.Retrofit;
@@ -41,8 +44,8 @@ public class DataHelper {
         return mDeviceService.findDevice(deviceId);
     }
 
-    public Call<ResponseBody> uploadFiles(String storage, List<MultipartBody.Part> files) {
-        return mDeviceService.uploadFiles(storage, files);
+    public Call<ResponseBody> uploadFiles(MultipartBody body) {
+        return mDeviceService.uploadFiles(body);
     }
 
     public Call<ResponseBody> createRunningData(RunningData data) {

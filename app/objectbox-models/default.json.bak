@@ -4,46 +4,6 @@
   "_note3": "If you have VCS merge conflicts, you must resolve them according to ObjectBox docs.",
   "entities": [
     {
-      "id": "1:2984485482935071121",
-      "lastPropertyId": "5:6400432630365547737",
-      "name": "LoopRecordFile",
-      "properties": [
-        {
-          "id": "1:3890847898618253636",
-          "name": "id",
-          "type": 6,
-          "flags": 1
-        },
-        {
-          "id": "2:6310486901308758628",
-          "name": "fileName",
-          "indexId": "1:7787679010703081593",
-          "type": 9,
-          "flags": 2080
-        },
-        {
-          "id": "3:3890835195567705348",
-          "name": "path",
-          "indexId": "2:8167701879142514995",
-          "type": 9,
-          "flags": 4096
-        },
-        {
-          "id": "4:9103819690728721394",
-          "name": "fileSize",
-          "type": 6,
-          "flags": 4
-        },
-        {
-          "id": "5:6400432630365547737",
-          "name": "createdAt",
-          "type": 6,
-          "flags": 4
-        }
-      ],
-      "relations": []
-    },
-    {
       "id": "2:3655478191363771326",
       "lastPropertyId": "5:1941841111793503030",
       "name": "FrameSavedImage",
@@ -137,17 +97,68 @@
         }
       ],
       "relations": []
+    },
+    {
+      "id": "4:8847677577163105587",
+      "lastPropertyId": "5:568740915028019660",
+      "name": "LoopVideoFile",
+      "properties": [
+        {
+          "id": "1:4720560299404421374",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:6859173777639132350",
+          "name": "fileName",
+          "indexId": "5:8902359801376224578",
+          "type": 9,
+          "flags": 2080
+        },
+        {
+          "id": "3:844236204578658719",
+          "name": "path",
+          "indexId": "6:1308178577664250605",
+          "type": 9,
+          "flags": 4096
+        },
+        {
+          "id": "4:8792733864593254208",
+          "name": "fileSize",
+          "type": 6,
+          "flags": 4
+        },
+        {
+          "id": "5:568740915028019660",
+          "name": "createdAt",
+          "type": 6,
+          "flags": 4
+        }
+      ],
+      "relations": []
     }
   ],
-  "lastEntityId": "3:628174458355129565",
-  "lastIndexId": "4:5054977972713270546",
+  "lastEntityId": "4:8847677577163105587",
+  "lastIndexId": "6:1308178577664250605",
   "lastRelationId": "0:0",
   "lastSequenceId": "0:0",
   "modelVersion": 5,
   "modelVersionParserMinimum": 5,
-  "retiredEntityUids": [],
-  "retiredIndexUids": [],
-  "retiredPropertyUids": [],
+  "retiredEntityUids": [
+    2984485482935071121
+  ],
+  "retiredIndexUids": [
+    7787679010703081593,
+    8167701879142514995
+  ],
+  "retiredPropertyUids": [
+    3890847898618253636,
+    6310486901308758628,
+    3890835195567705348,
+    9103819690728721394,
+    6400432630365547737
+  ],
   "retiredRelationUids": [],
   "version": 1
 }

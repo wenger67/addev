@@ -45,6 +45,8 @@ import com.vinson.addev.App;
 import com.vinson.addev.R;
 import com.vinson.addev.data.DataHelper;
 import com.vinson.addev.data.DataManager;
+import com.vinson.addev.model.annotation.DeviceEventId;
+import com.vinson.addev.model.annotation.UploadStorageType;
 import com.vinson.addev.model.local.FrameSavedImage;
 import com.vinson.addev.model.local.FrameSavedImage_;
 import com.vinson.addev.model.local.LoopVideoFile;
@@ -54,7 +56,9 @@ import com.vinson.addev.model.local.ObjectDetectResult_;
 import com.vinson.addev.tesnsorflowlite.env.ImageUtils;
 import com.vinson.addev.tesnsorflowlite.tflite.Classifier;
 import com.vinson.addev.tesnsorflowlite.tflite.TFLiteObjectDetectionAPIModel;
+import com.vinson.addev.tools.Config;
 import com.vinson.addev.utils.CommonUtil;
+import com.vinson.addev.model.annotation.ODResultType;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -78,6 +82,10 @@ import retrofit2.Response;
 
 import static com.vinson.addev.utils.CommonUtil.MEDIA_TYPE_IMAGE;
 import static com.vinson.addev.utils.CommonUtil.MEDIA_TYPE_VIDEO;
+import static com.vinson.addev.model.annotation.ODResultType.NONE;
+import static com.vinson.addev.model.annotation.ODResultType.ONLY_MOTOR;
+import static com.vinson.addev.model.annotation.ODResultType.ONLY_PERSON;
+import static com.vinson.addev.model.annotation.ODResultType.PERSON_WITH_MOTOR;
 import static com.vinson.addev.utils.TfLiteUtil.MINIMUM_CONFIDENCE_TF_OD_API;
 import static com.vinson.addev.utils.TfLiteUtil.TF_OD_API_INPUT_SIZE;
 import static com.vinson.addev.utils.TfLiteUtil.TF_OD_API_IS_QUANTIZED;
@@ -99,10 +107,14 @@ public class RecorderService extends Service {
     private static final int VIDEO_SNAPSHOT_DURATION = 60 * 1000;
     private static final long STORAGE_SIZE_RESERVE = 2 * 1024 * 1024;
     private static final boolean MAINTAIN_ASPECT = false;
-    private static boolean USE_FRAME_PROCESSOR = true;
-    private static boolean DECODE_BITMAP = true;
     // save cropped bitmap that send into tensorflow
     private static final boolean SAVE_CROPPED_BITMAP = false;
+    private static boolean USE_FRAME_PROCESSOR = true;
+    private static boolean DECODE_BITMAP = true;
+    public @ODResultType
+    int curODResultType = ODResultType.NONE;
+    public int personCount;
+    public int motorCount;
     CameraView mCameraView;
     CameraOptions mCameraOptions;
     com.otaliastudios.cameraview.size.Size previewSize = null;
@@ -115,6 +127,15 @@ public class RecorderService extends Service {
     private Runnable postInferenceCallback;
     private Runnable imageConverter;
     private Runnable saveImage;
+    private long lastProcessingTimeMs;
+    private boolean computingDetection = false;
+    private Bitmap rgbFrameBitmap = null;
+    private Bitmap croppedBitmap = null;
+    private boolean isProcessingFrame = false;
+    private Matrix frameToCropTransform;
+    private Matrix cropToFrameTransform;
+    private boolean savingImage = false;
+    private int savedImageCount = 0;
     private Handler.Callback callback = (msg -> {
         switch (msg.what) {
             case MSG_SAVE_FRAME_IMAGE:
@@ -136,25 +157,18 @@ public class RecorderService extends Service {
         }
         return false;
     });
-    private long lastProcessingTimeMs;
-    private boolean computingDetection = false;
-    private Bitmap rgbFrameBitmap = null;
-    private Bitmap croppedBitmap = null;
-    private boolean isProcessingFrame = false;
-    private Matrix frameToCropTransform;
-    private Matrix cropToFrameTransform;
 
     public RecorderService() {
     }
 
-    public static void startToStartRecording(Context context, ResultReceiver resultReceiver) {
+    public static void startRecording(Context context, ResultReceiver resultReceiver) {
         Intent intent = new Intent(context, RecorderService.class);
         intent.putExtra(START_SERVICE_COMMAND, COMMAND_START_RECORDING);
         intent.putExtra(RESULT_RECEIVER, resultReceiver);
         context.startService(intent);
     }
 
-    public static void startToStopRecording(Context context, ResultReceiver resultReceiver) {
+    public static void stopRecording(Context context, ResultReceiver resultReceiver) {
         Intent intent = new Intent(context, RecorderService.class);
         intent.putExtra(START_SERVICE_COMMAND, COMMAND_STOP_RECORDING);
         intent.putExtra(RESULT_RECEIVER, resultReceiver);
@@ -169,6 +183,12 @@ public class RecorderService extends Service {
 
     private void uploadBitmaps() {
         KLog.d();
+        MultipartBody.Builder builder = new MultipartBody.Builder()
+                .setType(MultipartBody.FORM)
+                .addFormDataPart("deviceId", Config.getDeviceSerial().split("_")[1])
+                .addFormDataPart("storage", UploadStorageType.LOCAL)
+                .addFormDataPart("typeId", String.valueOf(DeviceEventId.PERSON_DETECTED));
+
 
         List<FrameSavedImage> images = new ArrayList<>();  // images wait for upload
         List<ObjectDetectResult> results = new ArrayList<>(); // detect results wait for upload
@@ -177,34 +197,29 @@ public class RecorderService extends Service {
         images = DataManager.get().savedImageBox.query().orderDesc(FrameSavedImage_.createdAt)
                 .build().find(0, 4);
         videos = DataManager.get().recordFileBox.query().orderDesc(LoopVideoFile_.createdAt)
-                .build().find(0 , 1);
+                .build().find(0, 1);
         results = DataManager.get().objectBox.query().orderDesc(ObjectDetectResult_.createdAt)
                 .build().find(0, personCount + motorCount);
 
-
         List<MultipartBody.Part> files = new ArrayList<>();
         for (FrameSavedImage file : images) {
-            RequestBody requestFile = RequestBody.create(MediaType.parse("image/jpeg"),
+            RequestBody requestFile = RequestBody.create(MediaType.parse("multipart/form-data"),
                     new File(file.path));
-            MultipartBody.Part part = MultipartBody.Part.createFormData("files", file.fileName,
-                    requestFile);
-            files.add(part);
+            builder.addFormDataPart("images", file.fileName, requestFile);
         }
 
-//        for (LoopVideoFile file : videos) {
-//            RequestBody requestFile = RequestBody.create(MediaType.parse("multipart/form-data"),
-//                    new File(file.path));
-//            MultipartBody.Part part = MultipartBody.Part.createFormData("files", file.fileName,
-//                    requestFile);
-//            files.add(part);
-//        }
+        for (LoopVideoFile file : videos) {
+            RequestBody requestFile = RequestBody.create(MediaType.parse("multipart/form-data"),
+                    new File(file.path));
+            builder.addFormDataPart("videos", file.fileName, requestFile);
+        }
 
         KLog.d(images);
         KLog.d(videos);
         KLog.d(results);
 
-        KLog.d("######start");
-        DataHelper.getInstance().uploadFiles("local", files).enqueue(new Callback<ResponseBody>() {
+        List<FrameSavedImage> finalImages = images;
+        DataHelper.getInstance().uploadFiles(builder.build()).enqueue(new Callback<ResponseBody>() {
             @Override
             public void onResponse(Call<ResponseBody> call, Response<ResponseBody> response) {
                 // data prepared, clear flags
@@ -212,13 +227,20 @@ public class RecorderService extends Service {
                 savedImageCount = 0;
                 computingDetection = false;
 
-                // delete record
                 KLog.d("######success");
                 try {
                     assert response.body() != null;
                     KLog.d(response.body().string());
                 } catch (IOException e) {
                     e.printStackTrace();
+                }
+
+                // delete record
+                DataManager.get().savedImageBox.remove(finalImages);
+                for (FrameSavedImage image: finalImages) {
+                    boolean ret = new File(image.path).delete();
+                    if (!ret) KLog.w("delete image " + image.path + " failed");
+                    else KLog.d("delete image " + image.path + " success");
                 }
             }
 
@@ -230,7 +252,7 @@ public class RecorderService extends Service {
                 computingDetection = false;
 
                 KLog.d(t.getMessage());
-                for (StackTraceElement stackTraceElement: t.getStackTrace()) {
+                for (StackTraceElement stackTraceElement : t.getStackTrace()) {
                     KLog.d(stackTraceElement.toString());
                 }
             }
@@ -253,9 +275,6 @@ public class RecorderService extends Service {
         mCameraView.addCameraListener(new Listener());
         mCameraView.open();
     }
-
-    private boolean savingImage = false;
-    private int savedImageCount = 0;
 
     private void setupParams() {
         SizeSelector width = SizeSelectors.maxWidth(720);
@@ -302,8 +321,9 @@ public class RecorderService extends Service {
                             saveImage = () -> {
                                 try {
                                     if (savedImageCount < 4) {
-                                        savedImageCount ++;
-                                        File image = CommonUtil.getOutputMediaFile(MEDIA_TYPE_IMAGE);
+                                        savedImageCount++;
+                                        File image =
+                                                CommonUtil.getOutputMediaFile(MEDIA_TYPE_IMAGE);
                                         final FileOutputStream out = new FileOutputStream(image);
                                         yuvImage.compressToJpeg(new Rect(0, 0,
                                                 previewSize.getWidth(),
@@ -312,12 +332,13 @@ public class RecorderService extends Service {
                                         out.close();
                                         // save image into database
                                         if (image != null) {
-                                            FrameSavedImage savedImage = new FrameSavedImage(image.getName(),
+                                            FrameSavedImage savedImage =
+                                                    new FrameSavedImage(image.getName(),
                                                     image.getAbsolutePath(), image.length());
                                             DataManager.get().savedImageBox.put(savedImage);
                                         }
                                         // continue save image
-                                        mHandler.sendEmptyMessage(MSG_SAVE_FRAME_IMAGE);
+                                        mHandler.sendEmptyMessageDelayed(MSG_SAVE_FRAME_IMAGE, 100);
                                     } else {
                                         // stop save image
                                         // ready to upload
@@ -330,7 +351,7 @@ public class RecorderService extends Service {
                                 }
                             };
 
-                            processImage();
+                            doObjectDetect();
                         }
                     }
                 }
@@ -338,7 +359,7 @@ public class RecorderService extends Service {
         }
     }
 
-    private void processImage() {
+    private void doObjectDetect() {
         // No mutex needed as this method is not reentrant.
         if (computingDetection) {
             readyForNextImage();
@@ -370,45 +391,87 @@ public class RecorderService extends Service {
                     result.setLocation(location);
                     String title = result.getTitle();
                     if (title.equals("person")) {
-                        persons.add(new ObjectDetectResult(title, result.getConfidence(), location.left, location.top, location.right, location.bottom));
+                        persons.add(new ObjectDetectResult(title, result.getConfidence(),
+                                location.left, location.top, location.right, location.bottom));
                     } else if (title.equals("bicycle") || title.equals("motorcycle")) {
-                        motors.add(new ObjectDetectResult(title, result.getConfidence(), location.left, location.top, location.right, location.bottom));
+                        motors.add(new ObjectDetectResult(title, result.getConfidence(),
+                                location.left, location.top, location.right, location.bottom));
                     }
                     KLog.d(result.toString());
                 }
             }
 
-            if (savingImage) return;
-
-            if (persons.size() > 0 || motors.size() > 0) {
-                // save images
-                savingImage = true;
-                mHandler.sendEmptyMessage(MSG_SAVE_FRAME_IMAGE);
+            if (savingImage) {
+                KLog.d("savingImage, drop frame");
+                computingDetection = false;
+                return;
             }
 
             if (persons.size() > 0 && motors.size() > 0) {
                 // 检测到人物和摩托车
-                personCount = persons.size();
-                motorCount = motors.size();
-                DataManager.get().objectBox.put(persons);
-                DataManager.get().objectBox.put(motors);
-            } else if (persons.size() > 0) {
-                // 检测到人物
-                personCount = persons.size();
-                motorCount = 0;
-                DataManager.get().objectBox.put(persons);
+                if (curODResultType != PERSON_WITH_MOTOR) {
+                    KLog.d("ODResult type change from " + curODResultType + " to " +PERSON_WITH_MOTOR);
+                    curODResultType = PERSON_WITH_MOTOR;
 
+                    // save database
+                    personCount = persons.size();
+                    motorCount = motors.size();
+                    DataManager.get().objectBox.put(persons);
+                    DataManager.get().objectBox.put(motors);
+
+                    // save images
+                    savingImage = true;
+                    mHandler.sendEmptyMessage(MSG_SAVE_FRAME_IMAGE);
+                    return;
+                }
+
+                //same type, just skip
+                computingDetection = false;
+            } else if (persons.size() > 0) {
+                if (curODResultType != ONLY_PERSON) {
+                    KLog.d("ODResult type change from " + curODResultType + " to " +ONLY_PERSON);
+                    curODResultType = ONLY_PERSON;
+
+                    // 检测到人物
+                    personCount = persons.size();
+                    motorCount = 0;
+                    DataManager.get().objectBox.put(persons);
+
+                    // save images
+                    savingImage = true;
+                    mHandler.sendEmptyMessage(MSG_SAVE_FRAME_IMAGE);
+                    return;
+                }
+
+                //same type, just skip
+                computingDetection = false;
             } else if (motors.size() > 0) {
-                // 检测到摩托车
-                motorCount = motors.size();
-                personCount = 0;
-                DataManager.get().objectBox.put(motors);
+                if (curODResultType != ONLY_MOTOR) {
+                    KLog.d("ODResult type change from " + curODResultType + " to " +ONLY_MOTOR);
+                    curODResultType = ONLY_MOTOR;
+
+                    // 检测到摩托车
+                    motorCount = motors.size();
+                    personCount = 0;
+                    DataManager.get().objectBox.put(motors);
+
+                    // save images
+                    savingImage = true;
+                    mHandler.sendEmptyMessage(MSG_SAVE_FRAME_IMAGE);
+                    return;
+                }
+
+                //same type, just skip
+                computingDetection = false;
+            } else {
+                if (curODResultType != NONE) {
+                    KLog.d("ODResult type change from " + curODResultType + " to " +NONE);
+                    curODResultType = NONE;
+                }
+                computingDetection = false;
             }
         });
     }
-
-    public int personCount;
-    public int motorCount;
 
     protected int[] getRgbBytes() {
         imageConverter.run();
@@ -463,13 +526,13 @@ public class RecorderService extends Service {
 
         switch (intent.getIntExtra(START_SERVICE_COMMAND, COMMAND_NONE)) {
             case COMMAND_START_RECORDING:
-                handleStartRecordingCommand(intent);
+                handleStartRecording(intent);
                 break;
             case COMMAND_STOP_RECORDING:
-                handleStopRecordingCommand(intent);
+                handleStopRecording(intent);
                 break;
             case COMMAND_START_OBJECT_DETECT:
-                handleObjectDetectCommand();
+                startObjectDetect();
                 break;
             default:
                 throw new UnsupportedOperationException("Cannot start service with illegal " +
@@ -479,7 +542,7 @@ public class RecorderService extends Service {
         return START_NOT_STICKY;
     }
 
-    private void handleStartRecordingCommand(Intent intent) {
+    private void handleStartRecording(Intent intent) {
         KLog.d();
         if (!CameraUtils.hasCameras(this)) {
             throw new IllegalStateException("There is no device, not possible to start recording");
@@ -520,12 +583,23 @@ public class RecorderService extends Service {
         mCameraView.takeVideoSnapshot(Objects.requireNonNull(CommonUtil.getOutputMediaFile(MEDIA_TYPE_VIDEO)), VIDEO_SNAPSHOT_DURATION);
     }
 
-    private void handleObjectDetectCommand() {
+    private void startObjectDetect() {
         KLog.d();
         USE_FRAME_PROCESSOR = true;
         DECODE_BITMAP = true;
         processFrame();
     }
+
+    private void stopObjectDetect() {
+        if (USE_FRAME_PROCESSOR) {
+            USE_FRAME_PROCESSOR = false;
+            DECODE_BITMAP = false;
+            if (mCameraView!= null) mCameraView.clearFrameProcessors();
+        } else {
+            KLog.d("object detection not start yet");
+        }
+    }
+
 
     protected synchronized void runInBackground(final Runnable r) {
         if (mHandler != null) {
@@ -533,8 +607,20 @@ public class RecorderService extends Service {
         }
     }
 
-    private void handleStopRecordingCommand(Intent intent) {
+    private void handleStopRecording(Intent intent) {
         ResultReceiver resultReceiver = intent.getParcelableExtra(RESULT_RECEIVER);
+        if (mLoopRecording) {
+            KLog.d("currently in loop recording mode");
+            mLoopRecording = false;
+        }
+        if (mCameraView.isTakingVideo()) {
+            mCameraView.stopVideo();
+        }
+
+        if (mCameraView.isOpened()) {
+            mCameraView.clearCameraListeners();
+            mCameraView.close();
+        }
     }
 
     @Override
@@ -637,7 +723,7 @@ public class RecorderService extends Service {
             KLog.d(Arrays.toString(new Collection[]{videoAspect}));
 
             initTensorFlow();
-            handleObjectDetectCommand();
+            startObjectDetect();
         }
 
         @Override
@@ -695,4 +781,5 @@ public class RecorderService extends Service {
             KLog.d();
         }
     }
+
 }

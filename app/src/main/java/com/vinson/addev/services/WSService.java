@@ -1,7 +1,6 @@
 package com.vinson.addev.services;
 
 import android.content.Intent;
-import android.hardware.Camera;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkInfo;
@@ -14,23 +13,18 @@ import android.util.Log;
 import androidx.annotation.Nullable;
 
 import com.google.gson.Gson;
-import com.socks.library.KLog;
 import com.vinson.addev.App;
 import com.vinson.addev.model.ws.WSEvent;
-import com.vinson.addev.serialport.SerialPortService;
 import com.vinson.addev.tools.Config;
 import com.vinson.addev.utils.Constants;
 import com.xdandroid.hellodaemon.AbsWorkService;
 
 import org.json.JSONObject;
 
-import java.util.Timer;
-import java.util.TimerTask;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
-import im.zego.zegoexpress.ZegoExpressEngine;
 import im.zego.zegoexpress.callback.IZegoEventHandler;
 import im.zego.zegoexpress.constants.ZegoPublisherState;
 import im.zego.zegoexpress.entity.ZegoUser;
@@ -146,9 +140,8 @@ public class WSService extends AbsWorkService {
         mGson = new Gson();
 //        ZegoExpressEngine.destroyEngine(null);
         ResultReceiver resultReceiver = new ResultReceiver(mHandler);
-        RecorderService.startToStartRecording(this, resultReceiver);
+        RecorderService.startRecording(this, resultReceiver);
 //        RecorderService.startObjectDetect(this);
-        KLog.d("start SerialPortService");
 //        startService(new Intent(this, SerialPortService.class));
     }
 

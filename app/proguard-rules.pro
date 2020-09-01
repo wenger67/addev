@@ -21,3 +21,6 @@
 #-renamesourcefileattribute SourceFile
 
 -keep class **.zego.**{*;}
+
+-dontwarn com.tencent.bugly.**
+-keep public class com.tencent.bugly.**{*;}

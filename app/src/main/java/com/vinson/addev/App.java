@@ -6,7 +6,9 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.util.Log;
 
+import com.google.gson.Gson;
 import com.socks.library.KLog;
+import com.tencent.bugly.crashreport.CrashReport;
 import com.vinson.addev.data.DataManager;
 import com.vinson.addev.services.RecorderService;
 import com.vinson.addev.services.WSService;
@@ -22,14 +24,16 @@ public class App extends Application {
     private static App INSTANCE;
     private SharedPreferences sp;
     private static ZegoExpressEngine ENGINE;
-
+    public Gson mGson;
     @Override
     public void onCreate() {
         super.onCreate();
         INSTANCE = this;
         sp = getSharedPreferences(SP_NAME, Context.MODE_PRIVATE);
+        mGson = new Gson();
         // register crash handler
         CrashHandler.getInstance().init();
+        CrashReport.initCrashReport(getApplicationContext(), "3b268d3e09", true);
         // NOSQL orm
         ObjectBox.init(this);
         DataManager.get().init();

@@ -1,8 +1,8 @@
 package com.vinson.addev.utils;
 
 public class Constants {
-    public static final String BASE_URL = "http://192.168.1.3:8888";
-    public static final String WS_BASE_URL = "ws://192.168.1.3:8888";
+    public static final String BASE_URL = "http://192.168.1.102:8888";
+    public static final String WS_BASE_URL = "ws://192.168.1.102:8888";
     public static final String WS_PATH = "/api/ws/endpoint";
 
     public static final String PREFIX="LIFT_";

@@ -148,6 +148,8 @@ dependencies {
     annotationProcessor "io.objectbox:objectbox-processor:2.7.1"
     implementation "io.objectbox:objectbox-android:2.7.1"
 
+    implementation 'com.tencent.bugly:crashreport:3.1.0'
+
     testImplementation 'junit:junit:4.12'
     androidTestImplementation 'androidx.test.ext:junit:1.1.2'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.3.0'

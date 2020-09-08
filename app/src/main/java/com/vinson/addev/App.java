@@ -41,8 +41,8 @@ public class App extends Application {
         KLog.init(true);
         // daemon service
         DaemonEnv.initialize(this, WSService.class, null);
-//        ENGINE = ZegoExpressEngine.createEngine(BuildConfig.ZegoAppId, BuildConfig.ZegoAppSign,
-//                true, ZegoScenario.GENERAL, this, null);
+        ENGINE = ZegoExpressEngine.createEngine(BuildConfig.ZegoAppId, BuildConfig.ZegoAppSign,
+                true, ZegoScenario.GENERAL, this, null);
     }
 
     public static App getInstance() {

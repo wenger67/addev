@@ -46,6 +46,7 @@ import com.vinson.addev.R;
 import com.vinson.addev.data.DataHelper;
 import com.vinson.addev.data.DataManager;
 import com.vinson.addev.model.annotation.DeviceEventId;
+import com.vinson.addev.model.annotation.ODResultType;
 import com.vinson.addev.model.annotation.UploadStorageType;
 import com.vinson.addev.model.local.FrameSavedImage;
 import com.vinson.addev.model.local.FrameSavedImage_;
@@ -58,7 +59,6 @@ import com.vinson.addev.tesnsorflowlite.tflite.Classifier;
 import com.vinson.addev.tesnsorflowlite.tflite.TFLiteObjectDetectionAPIModel;
 import com.vinson.addev.tools.Config;
 import com.vinson.addev.utils.CommonUtil;
-import com.vinson.addev.model.annotation.ODResultType;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -80,12 +80,14 @@ import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
 
-import static com.vinson.addev.utils.CommonUtil.MEDIA_TYPE_IMAGE;
-import static com.vinson.addev.utils.CommonUtil.MEDIA_TYPE_VIDEO;
 import static com.vinson.addev.model.annotation.ODResultType.NONE;
 import static com.vinson.addev.model.annotation.ODResultType.ONLY_MOTOR;
 import static com.vinson.addev.model.annotation.ODResultType.ONLY_PERSON;
 import static com.vinson.addev.model.annotation.ODResultType.PERSON_WITH_MOTOR;
+import static com.vinson.addev.services.WSService.RR_ALREADY_RECORDING;
+import static com.vinson.addev.services.WSService.RR_RESTART_CAMERA_SUCCESS;
+import static com.vinson.addev.utils.CommonUtil.MEDIA_TYPE_IMAGE;
+import static com.vinson.addev.utils.CommonUtil.MEDIA_TYPE_VIDEO;
 import static com.vinson.addev.utils.TfLiteUtil.MINIMUM_CONFIDENCE_TF_OD_API;
 import static com.vinson.addev.utils.TfLiteUtil.TF_OD_API_INPUT_SIZE;
 import static com.vinson.addev.utils.TfLiteUtil.TF_OD_API_IS_QUANTIZED;
@@ -93,13 +95,14 @@ import static com.vinson.addev.utils.TfLiteUtil.TF_OD_API_LABELS_FILE;
 import static com.vinson.addev.utils.TfLiteUtil.TF_OD_API_MODEL_FILE;
 
 public class RecorderService extends Service {
-    public static final String RESULT_RECEIVER = "resultReceiver";
-    public static final int RECORD_RESULT_ALREADY_RECORDING = 3;
+    public static final String EXTRA_RESULT_RECEIVER = "extra.result.receiver";
     public static final int COMMAND_START_OBJECT_DETECT = 10;
-    private static final String START_SERVICE_COMMAND = "startServiceCommands";
+    private static final String EXTRA_START_COMMAND = "extra.start.command";
+    private static final String EXTRA_DELAY = "extra.delay";
     private static final int COMMAND_NONE = -1;
     private static final int COMMAND_START_RECORDING = 0;
     private static final int COMMAND_STOP_RECORDING = 1;
+    private static final int COMMAND_RESTART_CAMERA = 2;
     private static final int MSG_SAVE_FRAME_IMAGE = 101;
     private static final int MSG_DELETE_OLDEST_VIDEO = 11;
     private static final int MSG_READY_TO_UPLOAD = 10;
@@ -161,23 +164,30 @@ public class RecorderService extends Service {
     public RecorderService() {
     }
 
+    public static void restartCamera(Context context, ResultReceiver resultReceiver) {
+        Intent intent = new Intent(context, RecorderService.class);
+        intent.putExtra(EXTRA_START_COMMAND, COMMAND_RESTART_CAMERA);
+        intent.putExtra(EXTRA_RESULT_RECEIVER, resultReceiver);
+        context.startService(intent);
+    }
+
     public static void startRecording(Context context, ResultReceiver resultReceiver) {
         Intent intent = new Intent(context, RecorderService.class);
-        intent.putExtra(START_SERVICE_COMMAND, COMMAND_START_RECORDING);
-        intent.putExtra(RESULT_RECEIVER, resultReceiver);
+        intent.putExtra(EXTRA_START_COMMAND, COMMAND_START_RECORDING);
+        intent.putExtra(EXTRA_RESULT_RECEIVER, resultReceiver);
         context.startService(intent);
     }
 
     public static void stopRecording(Context context, ResultReceiver resultReceiver) {
         Intent intent = new Intent(context, RecorderService.class);
-        intent.putExtra(START_SERVICE_COMMAND, COMMAND_STOP_RECORDING);
-        intent.putExtra(RESULT_RECEIVER, resultReceiver);
+        intent.putExtra(EXTRA_START_COMMAND, COMMAND_STOP_RECORDING);
+        intent.putExtra(EXTRA_RESULT_RECEIVER, resultReceiver);
         context.startService(intent);
     }
 
     public static void startObjectDetect(Context context) {
         Intent intent = new Intent(context, RecorderService.class);
-        intent.putExtra(START_SERVICE_COMMAND, COMMAND_START_OBJECT_DETECT);
+        intent.putExtra(EXTRA_START_COMMAND, COMMAND_START_OBJECT_DETECT);
         context.startService(intent);
     }
 
@@ -201,7 +211,6 @@ public class RecorderService extends Service {
         results = DataManager.get().objectBox.query().orderDesc(ObjectDetectResult_.createdAt)
                 .build().find(0, personCount + motorCount);
 
-        List<MultipartBody.Part> files = new ArrayList<>();
         for (FrameSavedImage file : images) {
             RequestBody requestFile = RequestBody.create(MediaType.parse("multipart/form-data"),
                     new File(file.path));
@@ -237,7 +246,7 @@ public class RecorderService extends Service {
 
                 // delete record
                 DataManager.get().savedImageBox.remove(finalImages);
-                for (FrameSavedImage image: finalImages) {
+                for (FrameSavedImage image : finalImages) {
                     boolean ret = new File(image.path).delete();
                     if (!ret) KLog.w("delete image " + image.path + " failed");
                     else KLog.d("delete image " + image.path + " success");
@@ -268,7 +277,7 @@ public class RecorderService extends Service {
         mHandlerThread.start();
         mHandler = new Handler(mHandlerThread.getLooper(), callback);
 
-        CameraLogger.setLogLevel(CameraLogger.LEVEL_ERROR);
+        CameraLogger.setLogLevel(CameraLogger.LEVEL_VERBOSE);
         enableBackgroundCameraByOverlay();
         mCameraView.setLifecycleOwner(null);
         setupParams();
@@ -334,7 +343,8 @@ public class RecorderService extends Service {
                                         if (image != null) {
                                             FrameSavedImage savedImage =
                                                     new FrameSavedImage(image.getName(),
-                                                    image.getAbsolutePath(), image.length());
+                                                            image.getAbsolutePath(),
+                                                            image.length());
                                             DataManager.get().savedImageBox.put(savedImage);
                                         }
                                         // continue save image
@@ -410,7 +420,7 @@ public class RecorderService extends Service {
             if (persons.size() > 0 && motors.size() > 0) {
                 // 检测到人物和摩托车
                 if (curODResultType != PERSON_WITH_MOTOR) {
-                    KLog.d("ODResult type change from " + curODResultType + " to " +PERSON_WITH_MOTOR);
+                    KLog.d("ODResult type change from " + curODResultType + " to " + PERSON_WITH_MOTOR);
                     curODResultType = PERSON_WITH_MOTOR;
 
                     // save database
@@ -429,7 +439,7 @@ public class RecorderService extends Service {
                 computingDetection = false;
             } else if (persons.size() > 0) {
                 if (curODResultType != ONLY_PERSON) {
-                    KLog.d("ODResult type change from " + curODResultType + " to " +ONLY_PERSON);
+                    KLog.d("ODResult type change from " + curODResultType + " to " + ONLY_PERSON);
                     curODResultType = ONLY_PERSON;
 
                     // 检测到人物
@@ -447,7 +457,7 @@ public class RecorderService extends Service {
                 computingDetection = false;
             } else if (motors.size() > 0) {
                 if (curODResultType != ONLY_MOTOR) {
-                    KLog.d("ODResult type change from " + curODResultType + " to " +ONLY_MOTOR);
+                    KLog.d("ODResult type change from " + curODResultType + " to " + ONLY_MOTOR);
                     curODResultType = ONLY_MOTOR;
 
                     // 检测到摩托车
@@ -465,7 +475,7 @@ public class RecorderService extends Service {
                 computingDetection = false;
             } else {
                 if (curODResultType != NONE) {
-                    KLog.d("ODResult type change from " + curODResultType + " to " +NONE);
+                    KLog.d("ODResult type change from " + curODResultType + " to " + NONE);
                     curODResultType = NONE;
                 }
                 computingDetection = false;
@@ -524,7 +534,7 @@ public class RecorderService extends Service {
             throw new IllegalStateException("Must start the service with intent");
         }
 
-        switch (intent.getIntExtra(START_SERVICE_COMMAND, COMMAND_NONE)) {
+        switch (intent.getIntExtra(EXTRA_START_COMMAND, COMMAND_NONE)) {
             case COMMAND_START_RECORDING:
                 handleStartRecording(intent);
                 break;
@@ -534,6 +544,9 @@ public class RecorderService extends Service {
             case COMMAND_START_OBJECT_DETECT:
                 startObjectDetect();
                 break;
+            case COMMAND_RESTART_CAMERA:
+                handleRestartCamera(intent);
+                break;
             default:
                 throw new UnsupportedOperationException("Cannot start service with illegal " +
                         "commands");
@@ -542,17 +555,58 @@ public class RecorderService extends Service {
         return START_NOT_STICKY;
     }
 
+    private void handleRestartCamera(Intent intent) {
+        KLog.d();
+        if (!CameraUtils.hasCameras(this)) {
+            throw new IllegalStateException("There is no device, not possible to start recording");
+        }
+        final ResultReceiver resultReceiver = intent.getParcelableExtra(EXTRA_RESULT_RECEIVER);
+        mCameraView.clearCameraListeners();
+        mCameraView.addCameraListener(new Listener());
+        mCameraView.open();
+        int retryCount = 0;
+        while (!mCameraView.isOpened()) {
+            SystemClock.sleep(100);
+            retryCount ++;
+            if (retryCount < 10) {
+                KLog.d("camera not opened yet, retry " + retryCount + " times");
+            }else {
+                break;
+            }
+        }
+
+        if (retryCount == 10) {
+            KLog.w("retry 10 times about 1000ms, camera open failed");
+        } else {
+            if (mLoopRecording) {
+                // Already recording
+                if (resultReceiver != null) {
+                    resultReceiver.send(RR_ALREADY_RECORDING, null);
+                }
+                KLog.d("already in recording states");
+                return;
+            }
+            captureVideoSnapshot();
+            mLoopRecording = true;
+            if (resultReceiver != null)
+                resultReceiver.send(RR_RESTART_CAMERA_SUCCESS, null);
+        }
+    }
+
     private void handleStartRecording(Intent intent) {
         KLog.d();
         if (!CameraUtils.hasCameras(this)) {
             throw new IllegalStateException("There is no device, not possible to start recording");
         }
 
-        final ResultReceiver resultReceiver = intent.getParcelableExtra(RESULT_RECEIVER);
+        final ResultReceiver resultReceiver = intent.getParcelableExtra(EXTRA_RESULT_RECEIVER);
 
         if (mLoopRecording) {
             // Already recording
-            resultReceiver.send(RECORD_RESULT_ALREADY_RECORDING, null);
+            if (resultReceiver != null) {
+                resultReceiver.send(RR_ALREADY_RECORDING, null);
+            }
+            KLog.d("already in recording states");
             return;
         }
         captureVideoSnapshot();
@@ -572,6 +626,7 @@ public class RecorderService extends Service {
     }
 
     private void captureVideoSnapshot() {
+        KLog.d();
         if (mCameraView.isTakingVideo()) {
             KLog.w("already taking video.");
             return;
@@ -594,7 +649,7 @@ public class RecorderService extends Service {
         if (USE_FRAME_PROCESSOR) {
             USE_FRAME_PROCESSOR = false;
             DECODE_BITMAP = false;
-            if (mCameraView!= null) mCameraView.clearFrameProcessors();
+            if (mCameraView != null) mCameraView.clearFrameProcessors();
         } else {
             KLog.d("object detection not start yet");
         }
@@ -608,7 +663,7 @@ public class RecorderService extends Service {
     }
 
     private void handleStopRecording(Intent intent) {
-        ResultReceiver resultReceiver = intent.getParcelableExtra(RESULT_RECEIVER);
+        ResultReceiver resultReceiver = intent.getParcelableExtra(EXTRA_RESULT_RECEIVER);
         if (mLoopRecording) {
             KLog.d("currently in loop recording mode");
             mLoopRecording = false;
@@ -620,6 +675,11 @@ public class RecorderService extends Service {
         if (mCameraView.isOpened()) {
             mCameraView.clearCameraListeners();
             mCameraView.close();
+        }
+        if (resultReceiver != null) {
+            resultReceiver.send(WSService.RR_STOP_RECORD_SUCCESS, null);
+        } else {
+            KLog.w("ResultReceiver is null when handle stop recording!");
         }
     }
 

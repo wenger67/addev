@@ -7,18 +7,15 @@ import android.os.Handler;
 import android.os.Message;
 import android.text.Editable;
 import android.text.TextWatcher;
-import android.util.Log;
 import android.widget.ImageView;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.google.android.material.button.MaterialButton;
-import com.google.android.material.imageview.ShapeableImageView;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.textview.MaterialTextView;
 import com.google.gson.Gson;
-import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -31,7 +28,6 @@ import com.vinson.addev.R;
 import com.vinson.addev.SplashActivity;
 import com.vinson.addev.data.DataHelper;
 import com.vinson.addev.model.LiftInfo;
-import com.vinson.addev.model.Result;
 import com.vinson.addev.tools.Config;
 import com.vinson.addev.tools.NetworkObserver;
 import com.vinson.addev.utils.Constants;
@@ -157,7 +153,7 @@ public class ConfigActivity extends AppCompatActivity {
 
         btnSaveInfo.setOnClickListener(v-> {
             Config.setConfiged(true);
-            Config.setDeviceSerial(Constants.PREFIX + liftInfo.getID());
+            Config.setDeviceSerial(Constants.PREFIX_LIFT + liftInfo.getID());
             Config.setLiftInfo(liftInfo);
             mHandler.sendEmptyMessage(MSG_LAUNCH);
         });

@@ -47,7 +47,9 @@ import com.vinson.addev.data.DataHelper;
 import com.vinson.addev.data.DataManager;
 import com.vinson.addev.model.annotation.DeviceEventId;
 import com.vinson.addev.model.annotation.ODResultType;
+import com.vinson.addev.model.annotation.ObjectChangeType;
 import com.vinson.addev.model.annotation.UploadStorageType;
+import com.vinson.addev.model.local.AIDetectResult;
 import com.vinson.addev.model.local.FrameSavedImage;
 import com.vinson.addev.model.local.FrameSavedImage_;
 import com.vinson.addev.model.local.LoopVideoFile;
@@ -112,10 +114,13 @@ public class RecorderService extends Service {
     private static final boolean MAINTAIN_ASPECT = false;
     // save cropped bitmap that send into tensorflow
     private static final boolean SAVE_CROPPED_BITMAP = false;
+    private static final int MAX_IMAGE_SAVED_EVERY_DETECT = 4;
+    private static final int JPEG_COMPRESS_QUALITY = 30;
     private static boolean USE_FRAME_PROCESSOR = true;
     private static boolean DECODE_BITMAP = true;
     public @ODResultType
     int curODResultType = ODResultType.NONE;
+    public AIDetectResult preAIResult = new AIDetectResult();
     public int personCount;
     public int motorCount;
     CameraView mCameraView;
@@ -200,15 +205,17 @@ public class RecorderService extends Service {
                 .addFormDataPart("typeId", String.valueOf(DeviceEventId.PERSON_DETECTED));
 
 
-        List<FrameSavedImage> images = new ArrayList<>();  // images wait for upload
-        List<ObjectDetectResult> results = new ArrayList<>(); // detect results wait for upload
-        List<LoopVideoFile> videos = new ArrayList<>(); // videos wait for upload
-
-        images = DataManager.get().savedImageBox.query().orderDesc(FrameSavedImage_.createdAt)
-                .build().find(0, 4);
-        videos = DataManager.get().recordFileBox.query().orderDesc(LoopVideoFile_.createdAt)
+        // images wait for upload
+        List<FrameSavedImage> images =
+                DataManager.get().savedImageBox.query().orderDesc(FrameSavedImage_.createdAt)
+                .build().find(0, MAX_IMAGE_SAVED_EVERY_DETECT);
+        // videos wait for upload
+        List<LoopVideoFile> videos =
+                DataManager.get().recordFileBox.query().orderDesc(LoopVideoFile_.createdAt)
                 .build().find(0, 1);
-        results = DataManager.get().objectBox.query().orderDesc(ObjectDetectResult_.createdAt)
+        // detect results wait for upload
+        List<ObjectDetectResult> results =
+                DataManager.get().objectBox.query().orderDesc(ObjectDetectResult_.createdAt)
                 .build().find(0, personCount + motorCount);
 
         for (FrameSavedImage file : images) {
@@ -227,7 +234,6 @@ public class RecorderService extends Service {
         KLog.d(videos);
         KLog.d(results);
 
-        List<FrameSavedImage> finalImages = images;
         DataHelper.getInstance().uploadFiles(builder.build()).enqueue(new Callback<ResponseBody>() {
             @Override
             public void onResponse(Call<ResponseBody> call, Response<ResponseBody> response) {
@@ -245,8 +251,8 @@ public class RecorderService extends Service {
                 }
 
                 // delete record
-                DataManager.get().savedImageBox.remove(finalImages);
-                for (FrameSavedImage image : finalImages) {
+                DataManager.get().savedImageBox.remove(images);
+                for (FrameSavedImage image : images) {
                     boolean ret = new File(image.path).delete();
                     if (!ret) KLog.w("delete image " + image.path + " failed");
                     else KLog.d("delete image " + image.path + " success");
@@ -303,66 +309,63 @@ public class RecorderService extends Service {
 
     private void processFrame() {
         if (USE_FRAME_PROCESSOR) {
-            mCameraView.addFrameProcessor(new FrameProcessor() {
-                @Override
-                public void process(@NonNull Frame frame) {
-                    if (isProcessingFrame) {
-                        KLog.d("drop frame");
-                        return;
-                    }
-                    if (DECODE_BITMAP) {
-                        if (frame.getFormat() == ImageFormat.NV21
-                                && frame.getDataClass() == byte[].class) {
-                            byte[] data = CommonUtil.NV21_rotate_to_270(frame.getData(),
-                                    previewSize.getHeight(), previewSize.getWidth());
-                            isProcessingFrame = true;
-                            imageConverter = () -> ImageUtils.convertYUV420SPToARGB8888(data,
-                                    previewSize.getWidth(), previewSize.getHeight(), rgbBytes);
-                            postInferenceCallback = () -> isProcessingFrame = false;
+            mCameraView.addFrameProcessor(frame -> {
+                if (isProcessingFrame) {
+                    KLog.d("drop frame");
+                    return;
+                }
+                if (DECODE_BITMAP) {
+                    if (frame.getFormat() == ImageFormat.NV21
+                            && frame.getDataClass() == byte[].class) {
+                        byte[] data = CommonUtil.NV21_rotate_to_270(frame.getData(),
+                                previewSize.getHeight(), previewSize.getWidth());
+                        isProcessingFrame = true;
+                        imageConverter = () -> ImageUtils.convertYUV420SPToARGB8888(data,
+                                previewSize.getWidth(), previewSize.getHeight(), rgbBytes);
+                        postInferenceCallback = () -> isProcessingFrame = false;
 
-                            YuvImage yuvImage = new YuvImage(data,
-                                    frame.getFormat(),
-                                    previewSize
-                                            .getWidth(),
-                                    previewSize.getHeight(),
-                                    null);
+                        YuvImage yuvImage = new YuvImage(data,
+                                frame.getFormat(),
+                                previewSize
+                                        .getWidth(),
+                                previewSize.getHeight(),
+                                null);
 
-                            saveImage = () -> {
-                                try {
-                                    if (savedImageCount < 4) {
-                                        savedImageCount++;
-                                        File image =
-                                                CommonUtil.getOutputMediaFile(MEDIA_TYPE_IMAGE);
-                                        final FileOutputStream out = new FileOutputStream(image);
-                                        yuvImage.compressToJpeg(new Rect(0, 0,
-                                                previewSize.getWidth(),
-                                                previewSize.getHeight()), 30, out);
-                                        out.flush();
-                                        out.close();
-                                        // save image into database
-                                        if (image != null) {
-                                            FrameSavedImage savedImage =
-                                                    new FrameSavedImage(image.getName(),
-                                                            image.getAbsolutePath(),
-                                                            image.length());
-                                            DataManager.get().savedImageBox.put(savedImage);
-                                        }
-                                        // continue save image
-                                        mHandler.sendEmptyMessageDelayed(MSG_SAVE_FRAME_IMAGE, 100);
-                                    } else {
-                                        // stop save image
-                                        // ready to upload
-                                        mHandler.sendEmptyMessage(MSG_READY_TO_UPLOAD);
+                        saveImage = () -> {
+                            try {
+                                if (savedImageCount < MAX_IMAGE_SAVED_EVERY_DETECT) {
+                                    savedImageCount++;
+                                    File image =
+                                            CommonUtil.getOutputMediaFile(MEDIA_TYPE_IMAGE);
+                                    final FileOutputStream out = new FileOutputStream(image);
+                                    yuvImage.compressToJpeg(new Rect(0, 0,
+                                            previewSize.getWidth(),
+                                            previewSize.getHeight()), JPEG_COMPRESS_QUALITY, out);
+                                    out.flush();
+                                    out.close();
+                                    // save image into database
+                                    if (image != null) {
+                                        FrameSavedImage savedImage =
+                                                new FrameSavedImage(image.getName(),
+                                                        image.getAbsolutePath(),
+                                                        image.length());
+                                        DataManager.get().savedImageBox.put(savedImage);
                                     }
-
-                                } catch (final Exception e) {
-                                    e.printStackTrace();
-                                    KLog.e("Exception!" + e.getMessage());
+                                    // continue save image
+                                    mHandler.sendEmptyMessageDelayed(MSG_SAVE_FRAME_IMAGE, 100);
+                                } else {
+                                    // stop save image
+                                    // ready to upload
+                                    mHandler.sendEmptyMessage(MSG_READY_TO_UPLOAD);
                                 }
-                            };
 
-                            doObjectDetect();
-                        }
+                            } catch (final Exception e) {
+                                e.printStackTrace();
+                                KLog.e("Exception!" + e.getMessage());
+                            }
+                        };
+
+                        doObjectDetect();
                     }
                 }
             });
@@ -417,17 +420,37 @@ public class RecorderService extends Service {
                 return;
             }
 
+            personCount = persons.size();
+            motorCount = motors.size();
+
+            AIDetectResult aiDetectResult = new AIDetectResult(personCount, motorCount);
+            if (preAIResult.personCount == personCount && preAIResult.motorCount == motorCount) {
+                // nothing change
+                //same type, just skip
+                computingDetection = false;
+            } else {
+
+            }
+
+
             if (persons.size() > 0 && motors.size() > 0) {
                 // 检测到人物和摩托车
+                // person: none to some
+                // motor: none to some
+                if (preAIResult.personChange == ObjectChangeType.NONE && preAIResult.motorChange == ObjectChangeType.NONE) {
+                    aiDetectResult.motorChange = ObjectChangeType.NONE_TO_SOME;
+                    aiDetectResult.personChange = ObjectChangeType.NONE_TO_SOME;
+                    aiDetectResult.persons.addAll(persons);
+                    aiDetectResult.motors.addAll(motors);
+                    DataManager.get().mAIDetectResultBox.put(aiDetectResult); // save object, persons and motors
+                }
+
+                // person: some to reduce
+                // motor: none to some
+
                 if (curODResultType != PERSON_WITH_MOTOR) {
                     KLog.d("ODResult type change from " + curODResultType + " to " + PERSON_WITH_MOTOR);
                     curODResultType = PERSON_WITH_MOTOR;
-
-                    // save database
-                    personCount = persons.size();
-                    motorCount = motors.size();
-                    DataManager.get().objectBox.put(persons);
-                    DataManager.get().objectBox.put(motors);
 
                     // save images
                     savingImage = true;
@@ -443,8 +466,6 @@ public class RecorderService extends Service {
                     curODResultType = ONLY_PERSON;
 
                     // 检测到人物
-                    personCount = persons.size();
-                    motorCount = 0;
                     DataManager.get().objectBox.put(persons);
 
                     // save images
@@ -461,8 +482,6 @@ public class RecorderService extends Service {
                     curODResultType = ONLY_MOTOR;
 
                     // 检测到摩托车
-                    motorCount = motors.size();
-                    personCount = 0;
                     DataManager.get().objectBox.put(motors);
 
                     // save images

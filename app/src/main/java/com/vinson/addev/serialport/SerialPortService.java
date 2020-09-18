@@ -6,14 +6,13 @@ import android.os.IBinder;
 import android.os.SystemClock;
 import android.serialport.SerialPort;
 import android.serialport.SerialPortFinder;
-import android.widget.Button;
 
 import androidx.annotation.Nullable;
 
 import com.github.javafaker.Faker;
 import com.socks.library.KLog;
 import com.vinson.addev.data.DataHelper;
-import com.vinson.addev.model.request.RunningData;
+import com.vinson.addev.model.request.SensorData;
 import com.vinson.addev.tools.Config;
 
 import java.io.IOException;
@@ -65,13 +64,13 @@ public class SerialPortService extends Service {
 
     }
 
-    public interface IDataListener {
-        void onDataAvailable(byte[] buffer, int size);
+    public interface ISensorDataListener {
+        void onSensorData(SensorData data);
     }
 
-    private IDataListener listener;
+    private ISensorDataListener listener;
 
-    public void setListener(IDataListener listener) {
+    public void setListener(ISensorDataListener listener) {
         this.listener = listener;
     }
 
@@ -91,26 +90,24 @@ public class SerialPortService extends Service {
                     if (MOCK_MODE) size = 10;
 
                     if (size > 0) {
-                        KLog.d(Arrays.toString(buffer));
-                        if (listener != null)
-                            listener.onDataAvailable(buffer, size);
                         // post data into web server
                         KLog.d(Config.getLiftInfo().getAdDevice().getID());
-
                         SystemClock.sleep(10000);
-
-                        RunningData data = new RunningData(
-                                102, 145,
+                        SensorData data = new SensorData(
                                 (float) Faker.instance().number().randomDouble(5, -2, 2),
                                 (float) Faker.instance().number().randomDouble(5, -2, 2),
                                 (float) Faker.instance().number().randomDouble(5, -2, 2),
                                 (float) Faker.instance().number().randomDouble(5, -90, 90),
                                 (float) Faker.instance().number().randomDouble(5, -90, 90),
                                 (float) Faker.instance().number().randomDouble(5, -90, 90),
-                                (float) Faker.instance().number().randomDouble(5, 0, 5),
-                                (float) Faker.instance().number().randomDouble(1, -3, 60),
-                                158, true
+                                (float) Faker.instance().number().randomDouble(5, -5, 5),
+                                (float) Faker.instance().number().randomDouble(5, -50, 100),
+                                (float) Faker.instance().number().randomDouble(5, -1000, 100000)
                         );
+
+                        if (listener != null)
+                            listener.onSensorData(data);
+
                         DataHelper.getInstance().createRunningData(data).enqueue(new Callback<ResponseBody>() {
                             @Override
                             public void onResponse(Call<ResponseBody> call, Response<ResponseBody> response) {
@@ -121,7 +118,6 @@ public class SerialPortService extends Service {
                                     e.printStackTrace();
                                 }
                             }
-
                             @Override
                             public void onFailure(Call<ResponseBody> call, Throwable t) {
                                 KLog.d(t.getMessage());

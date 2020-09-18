@@ -1,6 +1,7 @@
 package com.vinson.addev.data;
 
 import com.vinson.addev.ObjectBox;
+import com.vinson.addev.model.local.AIDetectResult;
 import com.vinson.addev.model.local.FrameSavedImage;
 import com.vinson.addev.model.local.LoopVideoFile;
 import com.vinson.addev.model.local.ObjectDetectResult;
@@ -22,6 +23,7 @@ public class DataManager {
     public Box<LoopVideoFile> recordFileBox;
     public Box<ObjectDetectResult> objectBox;
     public Box<FrameSavedImage> savedImageBox;
+    public Box<AIDetectResult> mAIDetectResultBox;
 
     public void init() {
         boxStore = ObjectBox.get();
@@ -33,5 +35,6 @@ public class DataManager {
         recordFileBox = boxStore.boxFor(LoopVideoFile.class);
         objectBox = boxStore.boxFor(ObjectDetectResult.class);
         savedImageBox = boxStore.boxFor(FrameSavedImage.class);
+        mAIDetectResultBox = boxStore.boxFor(AIDetectResult.class);
     }
 }

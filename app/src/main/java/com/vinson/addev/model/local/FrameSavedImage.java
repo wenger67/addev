@@ -19,6 +19,9 @@ public class FrameSavedImage {
     public long fileSize;
     public long createdAt;
 
+    public FrameSavedImage() {
+    }
+
     public FrameSavedImage(String fileName, String path, long fileSize) {
         this.fileName = fileName;
         this.path = path;

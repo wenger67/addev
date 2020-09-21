@@ -35,8 +35,6 @@ import com.otaliastudios.cameraview.PictureResult;
 import com.otaliastudios.cameraview.VideoResult;
 import com.otaliastudios.cameraview.controls.Mode;
 import com.otaliastudios.cameraview.controls.Preview;
-import com.otaliastudios.cameraview.frame.Frame;
-import com.otaliastudios.cameraview.frame.FrameProcessor;
 import com.otaliastudios.cameraview.size.AspectRatio;
 import com.otaliastudios.cameraview.size.SizeSelector;
 import com.otaliastudios.cameraview.size.SizeSelectors;
@@ -46,21 +44,21 @@ import com.vinson.addev.R;
 import com.vinson.addev.data.DataHelper;
 import com.vinson.addev.data.DataManager;
 import com.vinson.addev.model.annotation.DeviceEventId;
-import com.vinson.addev.model.annotation.ODResultType;
 import com.vinson.addev.model.annotation.ObjectChangeType;
 import com.vinson.addev.model.annotation.UploadStorageType;
 import com.vinson.addev.model.local.AIDetectResult;
+import com.vinson.addev.model.local.AIDetectResult_;
 import com.vinson.addev.model.local.FrameSavedImage;
 import com.vinson.addev.model.local.FrameSavedImage_;
 import com.vinson.addev.model.local.LoopVideoFile;
 import com.vinson.addev.model.local.LoopVideoFile_;
 import com.vinson.addev.model.local.ObjectDetectResult;
-import com.vinson.addev.model.local.ObjectDetectResult_;
 import com.vinson.addev.tesnsorflowlite.env.ImageUtils;
 import com.vinson.addev.tesnsorflowlite.tflite.Classifier;
 import com.vinson.addev.tesnsorflowlite.tflite.TFLiteObjectDetectionAPIModel;
 import com.vinson.addev.tools.Config;
 import com.vinson.addev.utils.CommonUtil;
+import com.vinson.addev.utils.Constants;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -82,10 +80,6 @@ import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
 
-import static com.vinson.addev.model.annotation.ODResultType.NONE;
-import static com.vinson.addev.model.annotation.ODResultType.ONLY_MOTOR;
-import static com.vinson.addev.model.annotation.ODResultType.ONLY_PERSON;
-import static com.vinson.addev.model.annotation.ODResultType.PERSON_WITH_MOTOR;
 import static com.vinson.addev.services.WSService.RR_ALREADY_RECORDING;
 import static com.vinson.addev.services.WSService.RR_RESTART_CAMERA_SUCCESS;
 import static com.vinson.addev.utils.CommonUtil.MEDIA_TYPE_IMAGE;
@@ -100,7 +94,6 @@ public class RecorderService extends Service {
     public static final String EXTRA_RESULT_RECEIVER = "extra.result.receiver";
     public static final int COMMAND_START_OBJECT_DETECT = 10;
     private static final String EXTRA_START_COMMAND = "extra.start.command";
-    private static final String EXTRA_DELAY = "extra.delay";
     private static final int COMMAND_NONE = -1;
     private static final int COMMAND_START_RECORDING = 0;
     private static final int COMMAND_STOP_RECORDING = 1;
@@ -118,8 +111,6 @@ public class RecorderService extends Service {
     private static final int JPEG_COMPRESS_QUALITY = 30;
     private static boolean USE_FRAME_PROCESSOR = true;
     private static boolean DECODE_BITMAP = true;
-    public @ODResultType
-    int curODResultType = ODResultType.NONE;
     public AIDetectResult preAIResult = new AIDetectResult();
     public int personCount;
     public int motorCount;
@@ -197,26 +188,25 @@ public class RecorderService extends Service {
     }
 
     private void uploadBitmaps() {
-        KLog.d();
+        KLog.d(Config.getLiftInfo().getID());
         MultipartBody.Builder builder = new MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
-                .addFormDataPart("deviceId", Config.getDeviceSerial().split("_")[1])
+                .addFormDataPart("deviceId", String.valueOf(Config.getLiftInfo().getID()))
                 .addFormDataPart("storage", UploadStorageType.LOCAL)
                 .addFormDataPart("typeId", String.valueOf(DeviceEventId.PERSON_DETECTED));
-
 
         // images wait for upload
         List<FrameSavedImage> images =
                 DataManager.get().savedImageBox.query().orderDesc(FrameSavedImage_.createdAt)
-                .build().find(0, MAX_IMAGE_SAVED_EVERY_DETECT);
+                        .build().find(0, MAX_IMAGE_SAVED_EVERY_DETECT);
         // videos wait for upload
         List<LoopVideoFile> videos =
                 DataManager.get().recordFileBox.query().orderDesc(LoopVideoFile_.createdAt)
-                .build().find(0, 1);
+                        .build().find(0, 1);
         // detect results wait for upload
-        List<ObjectDetectResult> results =
-                DataManager.get().objectBox.query().orderDesc(ObjectDetectResult_.createdAt)
-                .build().find(0, personCount + motorCount);
+        List<AIDetectResult> results =
+                DataManager.get().detectResultBox.query().orderDesc(AIDetectResult_.createdAt)
+                        .build().find(0, 1);
 
         for (FrameSavedImage file : images) {
             RequestBody requestFile = RequestBody.create(MediaType.parse("multipart/form-data"),
@@ -233,45 +223,47 @@ public class RecorderService extends Service {
         KLog.d(images);
         KLog.d(videos);
         KLog.d(results);
-
-        DataHelper.getInstance().uploadFiles(builder.build()).enqueue(new Callback<ResponseBody>() {
-            @Override
-            public void onResponse(Call<ResponseBody> call, Response<ResponseBody> response) {
-                // data prepared, clear flags
-                savingImage = false;
-                savedImageCount = 0;
-                computingDetection = false;
-
-                KLog.d("######success");
-                try {
-                    assert response.body() != null;
-                    KLog.d(response.body().string());
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-
-                // delete record
-                DataManager.get().savedImageBox.remove(images);
-                for (FrameSavedImage image : images) {
-                    boolean ret = new File(image.path).delete();
-                    if (!ret) KLog.w("delete image " + image.path + " failed");
-                    else KLog.d("delete image " + image.path + " success");
-                }
-            }
-
-            @Override
-            public void onFailure(Call<ResponseBody> call, Throwable t) {
-                // data prepared, clear flags
-                savingImage = false;
-                savedImageCount = 0;
-                computingDetection = false;
-
-                KLog.d(t.getMessage());
-                for (StackTraceElement stackTraceElement : t.getStackTrace()) {
-                    KLog.d(stackTraceElement.toString());
-                }
-            }
-        });
+        savingImage = false;
+        savedImageCount = 0;
+        computingDetection = false;
+//        DataHelper.getInstance().uploadFiles(builder.build()).enqueue(new Callback<ResponseBody>() {
+//            @Override
+//            public void onResponse(Call<ResponseBody> call, Response<ResponseBody> response) {
+//                // data prepared, clear flags
+//                savingImage = false;
+//                savedImageCount = 0;
+//                computingDetection = false;
+//
+//                KLog.d("######success");
+//                try {
+//                    assert response.body() != null;
+//                    KLog.d(response.body().string());
+//                } catch (IOException e) {
+//                    e.printStackTrace();
+//                }
+//
+//                // delete record
+//                DataManager.get().savedImageBox.remove(images);
+//                for (FrameSavedImage image : images) {
+//                    boolean ret = new File(image.path).delete();
+//                    if (!ret) KLog.w("delete image " + image.path + " failed");
+//                    else KLog.d("delete image " + image.path + " success");
+//                }
+//            }
+//
+//            @Override
+//            public void onFailure(Call<ResponseBody> call, Throwable t) {
+//                // data prepared, clear flags
+//                savingImage = false;
+//                savedImageCount = 0;
+//                computingDetection = false;
+//
+//                KLog.d(t.getMessage());
+//                for (StackTraceElement stackTraceElement : t.getStackTrace()) {
+//                    KLog.d(stackTraceElement.toString());
+//                }
+//            }
+//        });
     }
 
     @Override
@@ -425,79 +417,51 @@ public class RecorderService extends Service {
 
             AIDetectResult aiDetectResult = new AIDetectResult(personCount, motorCount);
             if (preAIResult.personCount == personCount && preAIResult.motorCount == motorCount) {
-                // nothing change
+                KLog.d("nothing change, just skip");
                 //same type, just skip
+                aiDetectResult.personChange = personCount == 0 ? ObjectChangeType.NONE :
+                        ObjectChangeType.SOME_TO_MAINTAIN;
+                aiDetectResult.motorChange = motorCount == 0 ? ObjectChangeType.NONE :
+                        ObjectChangeType.SOME_TO_MAINTAIN;
+                preAIResult = aiDetectResult;
                 computingDetection = false;
             } else {
 
-            }
-
-
-            if (persons.size() > 0 && motors.size() > 0) {
-                // 检测到人物和摩托车
-                // person: none to some
-                // motor: none to some
-                if (preAIResult.personChange == ObjectChangeType.NONE && preAIResult.motorChange == ObjectChangeType.NONE) {
-                    aiDetectResult.motorChange = ObjectChangeType.NONE_TO_SOME;
-                    aiDetectResult.personChange = ObjectChangeType.NONE_TO_SOME;
-                    aiDetectResult.persons.addAll(persons);
-                    aiDetectResult.motors.addAll(motors);
-                    DataManager.get().mAIDetectResultBox.put(aiDetectResult); // save object, persons and motors
+                // person count reduce
+                if (preAIResult.personCount > personCount) {
+                    aiDetectResult.personChange = personCount == 0 ?
+                            ObjectChangeType.SOME_TO_NONE : ObjectChangeType.SOME_TO_REDUCE;
                 }
+                // person count increase
+                if (preAIResult.personCount < personCount) {
+                    aiDetectResult.personChange = preAIResult.personCount == 0 ?
+                            ObjectChangeType.NONE_TO_SOME : ObjectChangeType.SOME_TO_INCREASE;
+                }
+                aiDetectResult.personDelta = personCount - preAIResult.personCount;
 
-                // person: some to reduce
-                // motor: none to some
+                // motor count reduce
+                if (preAIResult.motorCount > motorCount) {
+                    aiDetectResult.motorChange = motorCount == 0 ? ObjectChangeType.SOME_TO_NONE
+                            : ObjectChangeType.SOME_TO_REDUCE;
+                }
+                // motor count increase
+                if (preAIResult.motorCount < motorCount) {
+                    aiDetectResult.motorChange = preAIResult.motorCount == 0 ?
+                            ObjectChangeType.NONE_TO_SOME : ObjectChangeType.SOME_TO_INCREASE;
+                }
+                aiDetectResult.motorDelta = motorCount - preAIResult.motorCount;
 
-                if (curODResultType != PERSON_WITH_MOTOR) {
-                    KLog.d("ODResult type change from " + curODResultType + " to " + PERSON_WITH_MOTOR);
-                    curODResultType = PERSON_WITH_MOTOR;
+                // save change
+                aiDetectResult.objects.addAll(persons);
+                aiDetectResult.objects.addAll(motors);
+                DataManager.get().detectResultBox.put(aiDetectResult);
+                preAIResult = aiDetectResult;
 
-                    // save images
+                if (aiDetectResult.personDelta != 0) {
+                    KLog.d("person count changed, save images");
                     savingImage = true;
                     mHandler.sendEmptyMessage(MSG_SAVE_FRAME_IMAGE);
-                    return;
                 }
-
-                //same type, just skip
-                computingDetection = false;
-            } else if (persons.size() > 0) {
-                if (curODResultType != ONLY_PERSON) {
-                    KLog.d("ODResult type change from " + curODResultType + " to " + ONLY_PERSON);
-                    curODResultType = ONLY_PERSON;
-
-                    // 检测到人物
-                    DataManager.get().objectBox.put(persons);
-
-                    // save images
-                    savingImage = true;
-                    mHandler.sendEmptyMessage(MSG_SAVE_FRAME_IMAGE);
-                    return;
-                }
-
-                //same type, just skip
-                computingDetection = false;
-            } else if (motors.size() > 0) {
-                if (curODResultType != ONLY_MOTOR) {
-                    KLog.d("ODResult type change from " + curODResultType + " to " + ONLY_MOTOR);
-                    curODResultType = ONLY_MOTOR;
-
-                    // 检测到摩托车
-                    DataManager.get().objectBox.put(motors);
-
-                    // save images
-                    savingImage = true;
-                    mHandler.sendEmptyMessage(MSG_SAVE_FRAME_IMAGE);
-                    return;
-                }
-
-                //same type, just skip
-                computingDetection = false;
-            } else {
-                if (curODResultType != NONE) {
-                    KLog.d("ODResult type change from " + curODResultType + " to " + NONE);
-                    curODResultType = NONE;
-                }
-                computingDetection = false;
             }
         });
     }
@@ -586,10 +550,10 @@ public class RecorderService extends Service {
         int retryCount = 0;
         while (!mCameraView.isOpened()) {
             SystemClock.sleep(100);
-            retryCount ++;
+            retryCount++;
             if (retryCount < 10) {
                 KLog.d("camera not opened yet, retry " + retryCount + " times");
-            }else {
+            } else {
                 break;
             }
         }

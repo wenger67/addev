@@ -108,7 +108,7 @@ public class SerialPortService extends Service {
                         if (listener != null)
                             listener.onSensorData(data);
 
-                        DataHelper.getInstance().createRunningData(data).enqueue(new Callback<ResponseBody>() {
+                        DataHelper.getInstance().createSensorData(data).enqueue(new Callback<ResponseBody>() {
                             @Override
                             public void onResponse(Call<ResponseBody> call, Response<ResponseBody> response) {
                                 try {

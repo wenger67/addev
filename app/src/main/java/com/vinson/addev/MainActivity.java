@@ -66,7 +66,6 @@ public class MainActivity extends AppCompatActivity {
     private void initEvent() {
 
         mBtnSensor.setOnClickListener(v -> {
-//            startActivity(new Intent(MainActivity.this, SensorActivity.class));
             startActivity(new Intent(MainActivity.this, DetectorActivity.class));
         });
     }
@@ -74,9 +73,6 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-//        PackageManager packageManager = getPackageManager();
-//        Intent intent = packageManager.getLaunchIntentForPackage("com.vinson.mmanager.debug");
-//        startActivity(intent);
     }
 
     @Override

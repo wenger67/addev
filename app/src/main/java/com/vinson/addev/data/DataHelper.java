@@ -17,7 +17,7 @@ public class DataHelper {
     private static DataHelper INSTANCE;
     private static OkHttpClient okHttpClient;
     private DeviceService mDeviceService;
-    private RunningDataService mRunningDataService;
+    private DataService mDataService;
 
     public DataHelper(String host) {
         Retrofit retrofit = new Retrofit.Builder()
@@ -26,7 +26,7 @@ public class DataHelper {
                 .addConverterFactory(GsonConverterFactory.create())
                 .build();
         mDeviceService = retrofit.create(DeviceService.class);
-        mRunningDataService = retrofit.create(RunningDataService.class);
+        mDataService = retrofit.create(DataService.class);
     }
 
     public static DataHelper getInstance() {
@@ -44,8 +44,8 @@ public class DataHelper {
         return mDeviceService.uploadFiles(body);
     }
 
-    public Call<ResponseBody> createRunningData(SensorData data) {
-        return mRunningDataService.createRunningData(data);
+    public Call<ResponseBody> createSensorData(SensorData data) {
+        return mDataService.createRunningData(data);
     }
 
     private OkHttpClient getOkHttpClient() {

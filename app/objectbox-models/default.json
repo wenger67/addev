@@ -45,7 +45,7 @@
     },
     {
       "id": "3:628174458355129565",
-      "lastPropertyId": "8:8169800169612127976",
+      "lastPropertyId": "9:8079394062871807400",
       "name": "ObjectDetectResult",
       "properties": [
         {
@@ -94,6 +94,14 @@
           "name": "bottom",
           "type": 7,
           "flags": 4
+        },
+        {
+          "id": "9:8079394062871807400",
+          "name": "detectResultId",
+          "indexId": "7:3395635043209753033",
+          "type": 11,
+          "flags": 1548,
+          "relationTarget": "AIDetectResult"
         }
       ],
       "relations": []
@@ -167,10 +175,66 @@
           "targetId": "3:628174458355129565"
         }
       ]
+    },
+    {
+      "id": "6:3019301488237825530",
+      "lastPropertyId": "8:8989114143910714421",
+      "name": "AIDetectResult",
+      "properties": [
+        {
+          "id": "1:6197939982942433924",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:8609656425792900718",
+          "name": "createdAt",
+          "type": 6,
+          "flags": 4
+        },
+        {
+          "id": "3:4650328807898282370",
+          "name": "personCount",
+          "type": 5,
+          "flags": 4
+        },
+        {
+          "id": "4:1060272198983631541",
+          "name": "motorCount",
+          "type": 5,
+          "flags": 4
+        },
+        {
+          "id": "5:7108766136520817160",
+          "name": "personDelta",
+          "type": 5,
+          "flags": 4
+        },
+        {
+          "id": "6:351918686854411113",
+          "name": "motorDelta",
+          "type": 5,
+          "flags": 4
+        },
+        {
+          "id": "7:2139804277072007061",
+          "name": "personChange",
+          "type": 5,
+          "flags": 4
+        },
+        {
+          "id": "8:8989114143910714421",
+          "name": "motorChange",
+          "type": 5,
+          "flags": 4
+        }
+      ],
+      "relations": []
     }
   ],
-  "lastEntityId": "5:3893994755689155057",
-  "lastIndexId": "6:1308178577664250605",
+  "lastEntityId": "6:3019301488237825530",
+  "lastIndexId": "7:3395635043209753033",
   "lastRelationId": "3:2277931465581041680",
   "lastSequenceId": "0:0",
   "modelVersion": 5,

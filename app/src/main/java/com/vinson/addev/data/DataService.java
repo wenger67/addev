@@ -7,7 +7,7 @@ import retrofit2.Call;
 import retrofit2.http.Body;
 import retrofit2.http.POST;
 
-public interface RunningDataService {
+public interface DataService {
 
     @POST("/dev/data/createRunningData")
     Call<ResponseBody> createRunningData(@Body SensorData data);

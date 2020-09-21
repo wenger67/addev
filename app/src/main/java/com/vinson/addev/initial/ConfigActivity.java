@@ -28,6 +28,7 @@ import com.vinson.addev.R;
 import com.vinson.addev.SplashActivity;
 import com.vinson.addev.data.DataHelper;
 import com.vinson.addev.model.LiftInfo;
+import com.vinson.addev.serialport.SerialPortService;
 import com.vinson.addev.tools.Config;
 import com.vinson.addev.tools.NetworkObserver;
 import com.vinson.addev.utils.Constants;
@@ -66,6 +67,9 @@ public class ConfigActivity extends AppCompatActivity {
     private String mDeviceId = "";
     private LiftInfo liftInfo;
 
+    MaterialTextView mHeight;
+    TextInputEditText mFloorEt;
+
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         KLog.d();
@@ -76,6 +80,9 @@ public class ConfigActivity extends AppCompatActivity {
         btnSaveInfo = findViewById(R.id.btn_save_info);
         etDeviceId = findViewById(R.id.et_device_id);
         tvLiftInfo = findViewById(R.id.tv_lift_info);
+
+        mHeight = findViewById(R.id.tv_height);
+        mFloorEt = findViewById(R.id.et_floor);
 
         mNetworkStateView = findViewById(R.id.iv_network_state);
         mNetworkStateDrawable = new IconicsDrawable(this).sizeDp(24);
@@ -94,7 +101,28 @@ public class ConfigActivity extends AppCompatActivity {
         });
     }
 
+    float initFloor;
+
     private void initEvent() {
+        mFloorEt.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                initFloor = Float.parseFloat(s.toString());
+            }
+        });
+
+
+
         etDeviceId.addTextChangedListener(new TextWatcher() {
             @Override
             public void beforeTextChanged(CharSequence s, int start, int count, int after) {
@@ -113,10 +141,10 @@ public class ConfigActivity extends AppCompatActivity {
         });
 
         btnGetInfo.setOnClickListener(v -> {
-            KLog.d(mDeviceId + " " + Integer.parseInt(mDeviceId));
             if (mDeviceId.isEmpty()) {
                 App.getInstance().showToast("Device ID can not be empty!");
             } else {
+                KLog.d(mDeviceId + " " + Integer.parseInt(mDeviceId));
                 DataHelper.getInstance().getDevice(Integer.parseInt(mDeviceId)).enqueue(new Callback<ResponseBody>() {
                     @Override
                     @EverythingIsNonNull
@@ -153,7 +181,14 @@ public class ConfigActivity extends AppCompatActivity {
 
         btnSaveInfo.setOnClickListener(v-> {
             Config.setConfiged(true);
-            Config.setDeviceSerial(Constants.PREFIX_LIFT + liftInfo.getID());
+            Config.setInitFloor(initFloor);
+            String height = mHeight.getText().toString();
+            try {
+                float h = Float.parseFloat(height);
+                Config.setInitHeight(h);
+            } catch (Exception e) {
+                Config.setInitHeight(1000);
+            }
             Config.setLiftInfo(liftInfo);
             mHandler.sendEmptyMessage(MSG_LAUNCH);
         });

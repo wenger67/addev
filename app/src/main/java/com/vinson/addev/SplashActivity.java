@@ -185,7 +185,8 @@ public class SplashActivity extends AppCompatActivity {
 
         // TODO verify succuss, launch mainactivity
         mHandler.removeCallbacksAndMessages(null);
-        mHandler.sendEmptyMessage(MSG_LAUNCH_MAIN);
+//        mHandler.sendEmptyMessage(MSG_LAUNCH_MAIN);
+        SplashActivity.this.finish();
     }
 
     private boolean handleMessage(Message msg) {

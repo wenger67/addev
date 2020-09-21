@@ -16,15 +16,15 @@ public class AIDetectResult {
     public long createdAt;
     public int personCount;
     public int motorCount;
+    public int personDelta;
+    public int motorDelta;
     @ObjectChangeType
     public int personChange;
     @ObjectChangeType
     public int motorChange;
 
     @Backlink
-    public ToMany<ObjectDetectResult> persons;
-    @Backlink
-    public ToMany<ObjectDetectResult> motors;
+    public ToMany<ObjectDetectResult> objects;
 
     public AIDetectResult() {
         this.createdAt = SystemClock.currentThreadTimeMillis();
@@ -38,6 +38,8 @@ public class AIDetectResult {
         this.createdAt = SystemClock.currentThreadTimeMillis();
         this.personCount = personCount;
         this.motorCount = motorCount;
+        personDelta = 0;
+        motorDelta = 0;
     }
 
     public AIDetectResult(int personCount, int motorCount, int personChange, int motorChange) {

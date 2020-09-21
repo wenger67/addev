@@ -23,7 +23,7 @@ public class DataManager {
     public Box<LoopVideoFile> recordFileBox;
     public Box<ObjectDetectResult> objectBox;
     public Box<FrameSavedImage> savedImageBox;
-    public Box<AIDetectResult> mAIDetectResultBox;
+    public Box<AIDetectResult> detectResultBox;
 
     public void init() {
         boxStore = ObjectBox.get();
@@ -35,6 +35,6 @@ public class DataManager {
         recordFileBox = boxStore.boxFor(LoopVideoFile.class);
         objectBox = boxStore.boxFor(ObjectDetectResult.class);
         savedImageBox = boxStore.boxFor(FrameSavedImage.class);
-        mAIDetectResultBox = boxStore.boxFor(AIDetectResult.class);
+        detectResultBox = boxStore.boxFor(AIDetectResult.class);
     }
 }

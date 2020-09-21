@@ -22,6 +22,10 @@ public class LoopVideoFile {
     public long fileSize;
     public long createdAt;
 
+
+    public LoopVideoFile() {
+    }
+
     public LoopVideoFile(String fileName, String path, long fileSize) {
         this.fileName = fileName;
         this.path = path;

@@ -4,6 +4,7 @@ import android.graphics.RectF;
 
 import io.objectbox.annotation.Entity;
 import io.objectbox.annotation.Id;
+import io.objectbox.relation.ToOne;
 
 @Entity
 public class ObjectDetectResult {
@@ -16,6 +17,10 @@ public class ObjectDetectResult {
     public float top;
     public float right;
     public float bottom;
+    public ToOne<AIDetectResult> detectResult;
+
+    public ObjectDetectResult() {
+    }
 
     public ObjectDetectResult(String title, float confidence, float left, float top, float right,
                               float bottom) {

@@ -10,6 +10,10 @@ import com.vinson.addev.utils.Constants;
 
 public class Config {
 
+    public static boolean getConfiged() {
+        return App.getInstance().getSP().getBoolean(Constants.SP_KEY_CONFIGED, false);
+    }
+
     public static void setConfiged(boolean configed) {
         if (configed == getConfiged()) return;
         SharedPreferences.Editor editor = App.getInstance().getSP().edit();
@@ -17,19 +21,10 @@ public class Config {
         editor.apply();
     }
 
-    public static boolean getConfiged() {
-        return App.getInstance().getSP().getBoolean(Constants.SP_KEY_CONFIGED, false);
-    }
-
-    public static void setDeviceSerial(String serial) {
-        if (serial.equals(getDeviceSerial())) return;
-        SharedPreferences.Editor editor = App.getInstance().getSP().edit();
-        editor.putString(Constants.SP_KEY_DEVICE_SERIAL, serial);
-        editor.apply();
-    }
-
-    public static String getDeviceSerial() {
-        return App.getInstance().getSP().getString(Constants.SP_KEY_DEVICE_SERIAL, "");
+    public static LiftInfo getLiftInfo() {
+        String json = App.getInstance().getSP().getString(Constants.SP_KEY_LIFT_INFO, "");
+        return new Gson().fromJson(json, new TypeToken<LiftInfo>() {
+        }.getType());
     }
 
     public static void setLiftInfo(LiftInfo liftInfo) {
@@ -40,9 +35,12 @@ public class Config {
         editor.apply();
     }
 
-    public static LiftInfo getLiftInfo() {
-        String json = App.getInstance().getSP().getString(Constants.SP_KEY_LIFT_INFO, "");
-        return new Gson().fromJson(json,new TypeToken<LiftInfo>(){}.getType());
+    public static String getDeviceSerial() {
+        return Constants.PREFIX_LIFT + "_" + getLiftInfo().getID();
+    }
+
+    public static String getStreamId() {
+        return App.getInstance().getSP().getString(Constants.SP_KEY_STREAM_ID, "");
     }
 
     public static void setStreamId(String serial) {
@@ -52,7 +50,25 @@ public class Config {
         editor.apply();
     }
 
-    public static String getStreamId() {
-        return App.getInstance().getSP().getString(Constants.SP_KEY_STREAM_ID, "");
+    public static float getInitFloor() {
+        return App.getInstance().getSP().getFloat(Constants.SP_KEY_INIT_FLOOR, -100);
+    }
+
+    public static void setInitFloor(float floor) {
+        if (floor == getInitFloor()) return;
+        SharedPreferences.Editor editor = App.getInstance().getSP().edit();
+        editor.putFloat(Constants.SP_KEY_INIT_FLOOR, floor);
+        editor.apply();
+    }
+
+    public static float getInitHeight() {
+        return App.getInstance().getSP().getFloat(Constants.SP_KEY_INIT_HEIGHT, -100);
+    }
+
+    public static void setInitHeight(float height) {
+        if (height == getInitHeight()) return;
+        SharedPreferences.Editor editor = App.getInstance().getSP().edit();
+        editor.putFloat(Constants.SP_KEY_INIT_HEIGHT, height);
+        editor.apply();
     }
 }

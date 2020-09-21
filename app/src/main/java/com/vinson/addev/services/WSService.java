@@ -178,6 +178,7 @@ public class WSService extends AbsWorkService {
 
     @Override
     public void onCreate() {
+        KLog.d();
         super.onCreate();
         mThreadPool = Executors.newFixedThreadPool(5);
         mHandlerThread = new HandlerThread("resultReceiver");
@@ -191,7 +192,6 @@ public class WSService extends AbsWorkService {
         mConnectivityManager.registerNetworkCallback(new NetworkRequest.Builder().build(),
                 mNetworkCallback);
         mGson = new Gson();
-//        ZegoExpressEngine.destroyEngine(null);
 
         RecorderService.startRecording(this, resultReceiver);
 //        startService(new Intent(this, SerialPortService.class));

@@ -192,9 +192,8 @@ public class WSService extends AbsWorkService {
         mConnectivityManager.registerNetworkCallback(new NetworkRequest.Builder().build(),
                 mNetworkCallback);
         mGson = new Gson();
-
+        RecorderService.startSerialReading(this, resultReceiver);
         RecorderService.startRecording(this, resultReceiver);
-//        startService(new Intent(this, SerialPortService.class));
     }
 
     @Override

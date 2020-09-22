@@ -27,14 +27,17 @@ import com.vinson.addev.App;
 import com.vinson.addev.R;
 import com.vinson.addev.SplashActivity;
 import com.vinson.addev.data.DataHelper;
+import com.vinson.addev.data.DataManager;
 import com.vinson.addev.model.LiftInfo;
-import com.vinson.addev.serialport.SerialPortService;
+import com.vinson.addev.model.request.SensorData;
+import com.vinson.addev.model.request.SensorData_;
+import com.vinson.addev.services.RecorderService;
 import com.vinson.addev.tools.Config;
 import com.vinson.addev.tools.NetworkObserver;
-import com.vinson.addev.utils.Constants;
 
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Objects;
 
 import okhttp3.ResponseBody;
@@ -51,24 +54,23 @@ import retrofit2.Response;
  */
 public class ConfigActivity extends AppCompatActivity {
 
-    private static final int MSG_LAUNCH = 1;
+    private static final int MSG_LAUNCH_SPLASH = 1;
     private static final int MSG_NETWORK_CHANGE = 4;
-
-    private NetworkObserver mNetwork;
-    private Handler mHandler = new Handler(this::handleMessage);
-    private boolean mConfigDone = false;
-
     MaterialButton btnGetInfo, btnSaveInfo;
     TextInputEditText etDeviceId;
     MaterialTextView tvLiftInfo;
-
     ImageView mNetworkStateView;
+    MaterialTextView mHeightTv;
+    TextInputEditText mFloorEt;
+    MaterialButton mUpdate;
+    float initFloor;
+    float initHeight;
+    private NetworkObserver mNetwork;
+    private boolean mConfigDone = false;
     private IconicsDrawable mNetworkStateDrawable;
+    private Handler mHandler = new Handler(this::handleMessage);
     private String mDeviceId = "";
     private LiftInfo liftInfo;
-
-    MaterialTextView mHeight;
-    TextInputEditText mFloorEt;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -81,8 +83,9 @@ public class ConfigActivity extends AppCompatActivity {
         etDeviceId = findViewById(R.id.et_device_id);
         tvLiftInfo = findViewById(R.id.tv_lift_info);
 
-        mHeight = findViewById(R.id.tv_height);
+        mHeightTv = findViewById(R.id.tv_height);
         mFloorEt = findViewById(R.id.et_floor);
+        mUpdate = findViewById(R.id.btn_update);
 
         mNetworkStateView = findViewById(R.id.iv_network_state);
         mNetworkStateDrawable = new IconicsDrawable(this).sizeDp(24);
@@ -101,9 +104,24 @@ public class ConfigActivity extends AppCompatActivity {
         });
     }
 
-    float initFloor;
+    private void updateHeight() {
+        List<SensorData> data =
+                DataManager.get().sensorDataBox.query().orderDesc(SensorData_.createdAt).
+                build().find(0, 10);
+        float sum = 0;
+        for (SensorData item : data) {
+            sum += item.height;
+        }
+        initHeight = sum / data.size();
+        mHeightTv.setText(initHeight + " m");
+    }
 
     private void initEvent() {
+        // achieve init height
+        mHeightTv.postDelayed(this::updateHeight, 2000);
+        mUpdate.setOnClickListener(v -> updateHeight());
+
+        // assign init floor
         mFloorEt.addTextChangedListener(new TextWatcher() {
             @Override
             public void beforeTextChanged(CharSequence s, int start, int count, int after) {
@@ -121,8 +139,7 @@ public class ConfigActivity extends AppCompatActivity {
             }
         });
 
-
-
+        // get lift info
         etDeviceId.addTextChangedListener(new TextWatcher() {
             @Override
             public void beforeTextChanged(CharSequence s, int start, int count, int after) {
@@ -139,7 +156,6 @@ public class ConfigActivity extends AppCompatActivity {
                 mDeviceId = s.toString();
             }
         });
-
         btnGetInfo.setOnClickListener(v -> {
             if (mDeviceId.isEmpty()) {
                 App.getInstance().showToast("Device ID can not be empty!");
@@ -148,19 +164,24 @@ public class ConfigActivity extends AppCompatActivity {
                 DataHelper.getInstance().getDevice(Integer.parseInt(mDeviceId)).enqueue(new Callback<ResponseBody>() {
                     @Override
                     @EverythingIsNonNull
-                    public void onResponse(Call<ResponseBody> call, Response<ResponseBody> response) {
+                    public void onResponse(Call<ResponseBody> call,
+                                           Response<ResponseBody> response) {
                         ResponseBody result = response.body();
                         assert result != null;
                         try {
-                            JsonObject object = new JsonParser().parse(result.string()).getAsJsonObject();
-                            JsonElement liftElement = object.get("data").getAsJsonObject().get("lift");
-                            liftInfo = new Gson().fromJson(liftElement, new TypeToken<LiftInfo>(){}.getType());
+                            JsonObject object =
+                                    new JsonParser().parse(result.string()).getAsJsonObject();
+                            JsonElement liftElement = object.get("data").getAsJsonObject().get(
+                                    "lift");
+                            liftInfo = new Gson().fromJson(liftElement, new TypeToken<LiftInfo>() {
+                            }.getType());
                         } catch (IOException e) {
                             e.printStackTrace();
                         }
                         KLog.d(liftInfo.toString());
 
-                        String builder = "ID:" + liftInfo.getID() + "\n" + "别名:" + liftInfo.getNickName() + "\n" +
+                        String builder =
+                                "ID:" + liftInfo.getID() + "\n" + "别名:" + liftInfo.getNickName() + "\n" +
                                 "编码:" + liftInfo.getCode() + "\n" +
                                 "使用单位:" + liftInfo.getOwner().getFullName() + "\n" +
                                 "地址" + liftInfo.getAddress().getAddressName() + liftInfo.getBuilding() + "栋" +
@@ -179,10 +200,11 @@ public class ConfigActivity extends AppCompatActivity {
             }
         });
 
-        btnSaveInfo.setOnClickListener(v-> {
+        // save init config information
+        btnSaveInfo.setOnClickListener(v -> {
             Config.setConfiged(true);
             Config.setInitFloor(initFloor);
-            String height = mHeight.getText().toString();
+            String height = mHeightTv.getText().toString();
             try {
                 float h = Float.parseFloat(height);
                 Config.setInitHeight(h);
@@ -190,7 +212,8 @@ public class ConfigActivity extends AppCompatActivity {
                 Config.setInitHeight(1000);
             }
             Config.setLiftInfo(liftInfo);
-            mHandler.sendEmptyMessage(MSG_LAUNCH);
+            RecorderService.startObjectDetect(this);
+            mHandler.sendEmptyMessage(MSG_LAUNCH_SPLASH);
         });
     }
 
@@ -213,7 +236,7 @@ public class ConfigActivity extends AppCompatActivity {
     private boolean handleMessage(Message msg) {
         if (isFinishing() || isDestroyed()) return true;
         switch (msg.what) {
-            case MSG_LAUNCH:
+            case MSG_LAUNCH_SPLASH:
                 KLog.d("launch SplashActivity");
                 synchronized (ConfigActivity.this) {
                     if (mConfigDone) break;

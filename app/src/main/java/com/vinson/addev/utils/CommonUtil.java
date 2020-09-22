@@ -7,10 +7,17 @@ import android.net.Uri;
 import android.os.Environment;
 import android.util.Log;
 
+import com.vinson.addev.model.local.AIDetectResult;
+import com.vinson.addev.model.local.ObjectDetectResult;
+import com.vinson.addev.model.upload.AIDetect;
+import com.vinson.addev.model.upload.ObjectDetect;
+
 import java.io.File;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
 
 public class CommonUtil {
@@ -219,5 +226,20 @@ public class CommonUtil {
             }
         }
         return nv21_rotated;
+    }
+
+    public static List<AIDetect> aiDetectConvert(List<AIDetectResult> results) {
+        List<AIDetect> detects = new ArrayList<>();
+        for (AIDetectResult result : results) {
+            List<ObjectDetect> objectDetects = new ArrayList<>();
+            for (ObjectDetectResult result1 : result.objects) {
+                objectDetects.add(new ObjectDetect(result1.id, result1.createdAt, result1.title,
+                        result1.confidence, result1.left, result1.top, result1.right,
+                        result1.bottom));
+            }
+            detects.add(new AIDetect(result.id, result.createdAt, result.personCount, result.motorCount,
+                    result.personDelta, result.motorDelta, result.personChange, result.motorChange, objectDetects));
+        }
+        return detects;
     }
 }

@@ -3,7 +3,8 @@ package com.vinson.addev;
 import android.content.Context;
 
 import com.socks.library.KLog;
-import com.vinson.addev.model.local.MyObjectBox;
+import com.vinson.addev.model.MyObjectBox;
+//import com.vinson.addev.model.MyObjectBox;
 
 import io.objectbox.BoxStore;
 import io.objectbox.BoxStoreBuilder;

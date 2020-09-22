@@ -83,7 +83,6 @@ public class SplashActivity extends AppCompatActivity {
         KLog.d();
         super.onResume();
 
-
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             if (!Settings.canDrawOverlays(SplashActivity.this)) {
                 KLog.d("canDrawOverlays");
@@ -180,9 +179,6 @@ public class SplashActivity extends AppCompatActivity {
 
         // TODO request device info
         // TODO if request failed, then retry by set mTick and send MSG_ERROR_VERIFY_FAILED
-
-        App.getInstance().startWSService();
-
         // TODO verify succuss, launch mainactivity
         mHandler.removeCallbacksAndMessages(null);
 //        mHandler.sendEmptyMessage(MSG_LAUNCH_MAIN);

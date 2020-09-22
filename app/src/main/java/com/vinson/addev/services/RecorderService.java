@@ -17,6 +17,8 @@ import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.ResultReceiver;
 import android.os.SystemClock;
+import android.serialport.SerialPort;
+import android.serialport.SerialPortFinder;
 import android.view.LayoutInflater;
 import android.view.Surface;
 import android.view.View;
@@ -25,6 +27,7 @@ import android.view.WindowManager;
 import androidx.annotation.NonNull;
 
 import com.blankj.utilcode.util.SDCardUtils;
+import com.github.javafaker.Faker;
 import com.otaliastudios.cameraview.CameraException;
 import com.otaliastudios.cameraview.CameraListener;
 import com.otaliastudios.cameraview.CameraLogger;
@@ -53,25 +56,32 @@ import com.vinson.addev.model.local.FrameSavedImage_;
 import com.vinson.addev.model.local.LoopVideoFile;
 import com.vinson.addev.model.local.LoopVideoFile_;
 import com.vinson.addev.model.local.ObjectDetectResult;
+import com.vinson.addev.model.request.SensorData;
+import com.vinson.addev.model.upload.AIDetect;
+import com.vinson.addev.serialport.SensorEngine;
+import com.vinson.addev.serialport.SerialPortWrapper;
 import com.vinson.addev.tesnsorflowlite.env.ImageUtils;
 import com.vinson.addev.tesnsorflowlite.tflite.Classifier;
 import com.vinson.addev.tesnsorflowlite.tflite.TFLiteObjectDetectionAPIModel;
 import com.vinson.addev.tools.Config;
 import com.vinson.addev.utils.CommonUtil;
-import com.vinson.addev.utils.Constants;
 
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import io.objectbox.query.QueryBuilder;
+import io.reactivex.internal.util.LinkedArrayList;
 import okhttp3.MediaType;
 import okhttp3.MultipartBody;
 import okhttp3.RequestBody;
@@ -79,6 +89,7 @@ import okhttp3.ResponseBody;
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
+import retrofit2.internal.EverythingIsNonNull;
 
 import static com.vinson.addev.services.WSService.RR_ALREADY_RECORDING;
 import static com.vinson.addev.services.WSService.RR_RESTART_CAMERA_SUCCESS;
@@ -98,6 +109,9 @@ public class RecorderService extends Service {
     private static final int COMMAND_START_RECORDING = 0;
     private static final int COMMAND_STOP_RECORDING = 1;
     private static final int COMMAND_RESTART_CAMERA = 2;
+    private static final int COMMAND_START_SERIAL_READING = 3;
+    private static final int COMMAND_STOP_SERIAL_READING = 4;
+
     private static final int MSG_SAVE_FRAME_IMAGE = 101;
     private static final int MSG_DELETE_OLDEST_VIDEO = 11;
     private static final int MSG_READY_TO_UPLOAD = 10;
@@ -144,7 +158,7 @@ public class RecorderService extends Service {
                 break;
             case MSG_READY_TO_UPLOAD:
                 if (mThreadPool != null && !mThreadPool.isShutdown())
-                    mThreadPool.execute(this::uploadBitmaps);
+                    mThreadPool.execute(this::uploadRecord);
                 break;
             case MSG_DELETE_OLDEST_VIDEO:
                 if (mThreadPool != null && !mThreadPool.isShutdown())
@@ -181,13 +195,27 @@ public class RecorderService extends Service {
         context.startService(intent);
     }
 
+    public static void startSerialReading(Context context, ResultReceiver resultReceiver) {
+        Intent intent = new Intent(context, RecorderService.class);
+        intent.putExtra(EXTRA_START_COMMAND, COMMAND_START_SERIAL_READING);
+        intent.putExtra(EXTRA_RESULT_RECEIVER, resultReceiver);
+        context.startService(intent);
+    }
+
+    public static void stopSerialReading(Context context, ResultReceiver resultReceiver) {
+        Intent intent = new Intent(context, RecorderService.class);
+        intent.putExtra(EXTRA_START_COMMAND, COMMAND_STOP_SERIAL_READING);
+        intent.putExtra(EXTRA_RESULT_RECEIVER, resultReceiver);
+        context.startService(intent);
+    }
+
     public static void startObjectDetect(Context context) {
         Intent intent = new Intent(context, RecorderService.class);
         intent.putExtra(EXTRA_START_COMMAND, COMMAND_START_OBJECT_DETECT);
         context.startService(intent);
     }
 
-    private void uploadBitmaps() {
+    private void uploadRecord() {
         KLog.d(Config.getLiftInfo().getID());
         MultipartBody.Builder builder = new MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
@@ -222,7 +250,10 @@ public class RecorderService extends Service {
 
         KLog.d(images);
         KLog.d(videos);
-        KLog.d(results);
+
+        // object convert
+        List<AIDetect> detects = CommonUtil.aiDetectConvert(results);
+        KLog.d(App.getInstance().mGson.toJson(detects));
         savingImage = false;
         savedImageCount = 0;
         computingDetection = false;
@@ -266,6 +297,12 @@ public class RecorderService extends Service {
 //        });
     }
 
+    SerialPort mSerialPort;
+    OutputStream mSerialOutputStream;
+    InputStream mSerialInputStream;
+    private static final boolean MOCK_MODE = true;
+    SerialReadThread mSerialReadThread;
+
     @Override
     public void onCreate() {
         KLog.d();
@@ -281,7 +318,98 @@ public class RecorderService extends Service {
         setupParams();
         mCameraView.addCameraListener(new Listener());
         mCameraView.open();
+
+
+        // serial port
+        // start thread to receive data from serialport
+        try {
+            mSerialPort = SerialPortWrapper.getSerialPort();
+            if (mSerialPort == null) {
+                KLog.e("can not get serial port");
+                SerialPortFinder serialPortFinder = new SerialPortFinder();
+                KLog.d(Arrays.toString(serialPortFinder.getAllDevicesPath()));
+                if (!MOCK_MODE) return;
+            } else {
+                mSerialOutputStream = mSerialPort.getOutputStream();
+                mSerialInputStream = mSerialPort.getInputStream();
+            }
+            // start read thread
+            mSerialReadThread = new SerialReadThread();
+        } catch (Exception e) {
+            e.printStackTrace();
+            KLog.d(e.getMessage());
+        }
     }
+
+    public interface ISensorDataListener {
+        void onSensorData(SensorData data);
+    }
+    private static final int SERIAL_PORT_FREQ = 50;
+    private ISensorDataListener listener;
+    public void setListener(ISensorDataListener listener) {
+        this.listener = listener;
+    }
+    private class SerialReadThread extends Thread {
+        @Override
+        public void run() {
+            super.run();
+            while (!isInterrupted()) {
+                int size;
+                try {
+                    byte[] buffer = new byte[64];
+                    if (mSerialInputStream == null) {
+                        if (!MOCK_MODE)  return;
+                    } else {
+                        size = mSerialInputStream.read(buffer);
+                    }
+                    if (MOCK_MODE) size = 10;
+
+                    if (size > 0) {
+                        // post data into web server
+                        SystemClock.sleep(1000 / SERIAL_PORT_FREQ);
+                        SensorData data = new SensorData(
+                                (float) Faker.instance().number().randomDouble(5, -2, 2),
+                                (float) Faker.instance().number().randomDouble(5, -2, 2),
+                                (float) Faker.instance().number().randomDouble(5, -2, 2),
+                                (float) Faker.instance().number().randomDouble(5, -90, 90),
+                                (float) Faker.instance().number().randomDouble(5, -90, 90),
+                                (float) Faker.instance().number().randomDouble(5, -90, 90),
+                                (float) Faker.instance().number().randomDouble(5, -5, 5),
+                                (float) Faker.instance().number().randomDouble(5, -50, 100),
+                                (float) Faker.instance().number().randomDouble(5, -1000, 100000)
+                        );
+
+                        if (listener != null)
+                            listener.onSensorData(data);
+                        // TODO add algorithm
+                        SensorEngine.getInstance().newData(data);
+                        DataManager.get().sensorDataBox.put(data);
+                        DataHelper.getInstance().createSensorData(data).enqueue(new Callback<ResponseBody>() {
+                            @Override
+                            @EverythingIsNonNull
+                            public void onResponse(Call<ResponseBody> call, Response<ResponseBody> response) {
+                                try {
+                                    ResponseBody body = response.body();
+                                    if (body != null) KLog.d(body.string());
+                                } catch (IOException e) {
+                                    e.printStackTrace();
+                                }
+                            }
+                            @Override
+                            @EverythingIsNonNull
+                            public void onFailure(Call<ResponseBody> call, Throwable t) {
+                                KLog.d(t.getMessage());
+                            }
+                        });
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    KLog.d(e.getMessage());
+                }
+            }
+        }
+    }
+
 
     private void setupParams() {
         SizeSelector width = SizeSelectors.maxWidth(720);
@@ -426,7 +554,6 @@ public class RecorderService extends Service {
                 preAIResult = aiDetectResult;
                 computingDetection = false;
             } else {
-
                 // person count reduce
                 if (preAIResult.personCount > personCount) {
                     aiDetectResult.personChange = personCount == 0 ?
@@ -454,6 +581,7 @@ public class RecorderService extends Service {
                 // save change
                 aiDetectResult.objects.addAll(persons);
                 aiDetectResult.objects.addAll(motors);
+                aiDetectResult.createdAt = System.currentTimeMillis();
                 DataManager.get().detectResultBox.put(aiDetectResult);
                 preAIResult = aiDetectResult;
 
@@ -484,7 +612,7 @@ public class RecorderService extends Service {
                 WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON |
                         WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE |
                         WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-                PixelFormat.TRANSLUCENT);
+                PixelFormat.TRANSPARENT);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             params.type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
         }
@@ -530,6 +658,12 @@ public class RecorderService extends Service {
             case COMMAND_RESTART_CAMERA:
                 handleRestartCamera(intent);
                 break;
+            case COMMAND_START_SERIAL_READING:
+                handleStartSerialReading();
+                break;
+            case COMMAND_STOP_SERIAL_READING:
+                handleStopSerialReading();
+                break;
             default:
                 throw new UnsupportedOperationException("Cannot start service with illegal " +
                         "commands");
@@ -537,6 +671,38 @@ public class RecorderService extends Service {
 
         return START_NOT_STICKY;
     }
+
+    private void handleStartSerialReading(){
+        if (mSerialReadThread == null) {
+            KLog.w("serial reading thread not created");
+            return;
+        }
+
+        if (mSerialReadThread.isAlive()) {
+            KLog.w("serial reading thread has stared");
+            return;
+        }
+        mSerialReadThread.start();
+        SensorEngine.getInstance().setStateChange(((oldState, newState) -> {
+            KLog.d(oldState + ", " + newState);
+
+        }));
+    }
+
+    private void handleStopSerialReading(){
+        if (mSerialReadThread == null) {
+            KLog.w("serial reading thread not created");
+            return;
+        }
+
+        if (!mSerialReadThread.isAlive()) {
+            KLog.w("serial reading thread has stopped");
+            return;
+        }
+        mSerialReadThread.interrupt();
+        SensorEngine.getInstance().setStateChange(null);
+    }
+
 
     private void handleRestartCamera(Intent intent) {
         KLog.d();
@@ -766,7 +932,6 @@ public class RecorderService extends Service {
             KLog.d(Arrays.toString(new Collection[]{videoAspect}));
 
             initTensorFlow();
-            startObjectDetect();
         }
 
         @Override

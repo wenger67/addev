@@ -231,9 +231,158 @@
         }
       ],
       "relations": []
+    },
+    {
+      "id": "7:7784875267738167937",
+      "lastPropertyId": "11:2441495570057500918",
+      "name": "SensorData",
+      "properties": [
+        {
+          "id": "1:3941572719828043644",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:4421453740379680811",
+          "name": "accx",
+          "type": 7,
+          "flags": 4
+        },
+        {
+          "id": "3:8309911248167895406",
+          "name": "accy",
+          "type": 7,
+          "flags": 4
+        },
+        {
+          "id": "4:84991657595021857",
+          "name": "accz",
+          "type": 7,
+          "flags": 4
+        },
+        {
+          "id": "5:1834668219538543756",
+          "name": "degx",
+          "type": 7,
+          "flags": 4
+        },
+        {
+          "id": "6:4991257601069416043",
+          "name": "degy",
+          "type": 7,
+          "flags": 4
+        },
+        {
+          "id": "7:7035529016790907357",
+          "name": "degz",
+          "type": 7,
+          "flags": 4
+        },
+        {
+          "id": "8:6593976932186822694",
+          "name": "speedz",
+          "type": 7,
+          "flags": 4
+        },
+        {
+          "id": "9:8905450055656445170",
+          "name": "temp",
+          "type": 7,
+          "flags": 4
+        },
+        {
+          "id": "10:118472007703308144",
+          "name": "height",
+          "type": 7,
+          "flags": 4
+        },
+        {
+          "id": "11:2441495570057500918",
+          "name": "createdAt",
+          "type": 6,
+          "flags": 4
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "8:8413127353897012635",
+      "lastPropertyId": "12:7251965833977383346",
+      "name": "Movement",
+      "properties": [
+        {
+          "id": "1:1694041581069698580",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:7917018942201699291",
+          "name": "startHeight",
+          "type": 7,
+          "flags": 4
+        },
+        {
+          "id": "3:7306185727200201863",
+          "name": "startTime",
+          "type": 6,
+          "flags": 4
+        },
+        {
+          "id": "4:7504750087441513799",
+          "name": "accelerateEndTime",
+          "type": 6,
+          "flags": 4
+        },
+        {
+          "id": "5:2739133153780994098",
+          "name": "stableEndTime",
+          "type": 6,
+          "flags": 4
+        },
+        {
+          "id": "6:1826820854326651691",
+          "name": "decelerateEndTime",
+          "type": 6,
+          "flags": 4
+        },
+        {
+          "id": "7:4815179152416984625",
+          "name": "endHeight",
+          "type": 6,
+          "flags": 4
+        },
+        {
+          "id": "8:1208785241055092307",
+          "name": "startData",
+          "type": 9
+        },
+        {
+          "id": "9:1480365006304951420",
+          "name": "accelerateData",
+          "type": 9
+        },
+        {
+          "id": "10:5462412741121590070",
+          "name": "stableData",
+          "type": 9
+        },
+        {
+          "id": "11:8550739966633906862",
+          "name": "decelerateData",
+          "type": 9
+        },
+        {
+          "id": "12:7251965833977383346",
+          "name": "endData",
+          "type": 9
+        }
+      ],
+      "relations": []
     }
   ],
-  "lastEntityId": "6:3019301488237825530",
+  "lastEntityId": "8:8413127353897012635",
   "lastIndexId": "7:3395635043209753033",
   "lastRelationId": "3:2277931465581041680",
   "lastSequenceId": "0:0",

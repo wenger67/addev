@@ -10,7 +10,6 @@ import com.google.gson.Gson;
 import com.socks.library.KLog;
 import com.tencent.bugly.crashreport.CrashReport;
 import com.vinson.addev.data.DataManager;
-import com.vinson.addev.services.RecorderService;
 import com.vinson.addev.services.WSService;
 import com.vinson.addev.tools.CrashHandler;
 import com.vinson.addev.utils.ToastCompat;
@@ -41,6 +40,9 @@ public class App extends Application {
         KLog.init(true);
         // daemon service initial
         DaemonEnv.initialize(this, WSService.class, null);
+        // start sensor data service
+        startService(new Intent(this, WSService.class));
+
         ENGINE = ZegoExpressEngine.createEngine(BuildConfig.ZegoAppId, BuildConfig.ZegoAppSign,
                 true, ZegoScenario.GENERAL, this, null);
     }
@@ -48,11 +50,6 @@ public class App extends Application {
     public static App getInstance() {
         return INSTANCE;
     }
-
-    public void startWSService() {
-        this.startService(new Intent(this, WSService.class));
-    }
-
     public static ZegoExpressEngine getEngine() {
         return ENGINE;
     }
